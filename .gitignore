@@ -2,3 +2,4 @@
 env/
 #graphics.py is essentially a package
 graphics.py
+__pycache__/
