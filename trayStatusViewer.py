@@ -42,7 +42,7 @@ class trayStatusViewer:
             self.status = TARGET
 
         def showAsPicked(self):
-            self.circle.setFill(color_rgb(66, 245, 108))
+            self.circle.setFill(color_rgb(52, 217, 90))
             self.status = PICKED
 
         def getStatus(self):
