@@ -55,7 +55,7 @@ class trayStatusViewer:
         self.TUBES_ALONG_Y = tubesAlongY
 
         windowX = self.EDGE_LENGTH*(self.NUM_RACKS*(self.TUBES_ALONG_X+1)-1)
-        windowY = self.EDGE_LENGTH*(self.TUBES_ALONG_Y+2)
+        windowY = self.EDGE_LENGTH*(self.TUBES_ALONG_Y+3)
         self.win = GraphWin('tubes', windowX, windowY) # give title and dimensions
 
         #initialize tray of ABSENT tubes
@@ -66,7 +66,9 @@ class trayStatusViewer:
             for x in range(self.TUBES_ALONG_X):
                 y_list = []
                 for y in range(self.TUBES_ALONG_Y):
-                    y_list.append(self.Tube(self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + x), self.EDGE_LENGTH*(y+1), self.EDGE_LENGTH, self.win))
+                    x_coor = self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + x)
+                    y_coor = self.EDGE_LENGTH*(y+1)
+                    y_list.append(self.Tube(x_coor, y_coor, self.EDGE_LENGTH, self.win))
                 x_list.append(y_list)
             tubes.append(x_list)
         self.tubes = tubes
@@ -74,13 +76,28 @@ class trayStatusViewer:
         #draw column indices between each pair of trays
         for rack in range(1, self.NUM_RACKS):
             for row in range(self.TUBES_ALONG_Y):
-                Text(Point(int(np.round(self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1)-0.5))), int(np.round(self.EDGE_LENGTH*(row + 1.5)))), str(row+1)).draw(self.win)
+                x_coor = int(np.round(self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1)-0.5)))
+                y_coor = int(np.round(self.EDGE_LENGTH*(row + 1.5)))
+                Text(Point(x_coor, y_coor), str(TUBES_ALONG_Y-row)).draw(self.win)
 
         #draw row indices above and below each tray
+        alphabet = 'ABCDEFGH'
+        top_y_coor = self.EDGE_LENGTH*(self.TUBES_ALONG_Y+1.5)
+        bottom_y_coor = self.EDGE_LENGTH*0.5
         for rack in range(self.NUM_RACKS):
             for col in range(self.TUBES_ALONG_X):
-                Text(Point(self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + col + 0.5), self.EDGE_LENGTH*(self.TUBES_ALONG_Y+1.5)), str(col+1)).draw(self.win)
-                Text(Point(self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + col + 0.5), self.EDGE_LENGTH*0.5), str(col+1)).draw(self.win)
+                x_coor = self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + col + 0.5)
+                Text(Point(x_coor, top_y_coor), alphabet[col]).draw(self.win)
+
+                Text(Point(x_coor, bottom_y_coor), alphabet[col]).draw(self.win)
+
+        #draw tray numbers beneath trays
+        y_coor = self.EDGE_LENGTH*(TUBES_ALONG_Y+2.3)
+        for rack in range(self.NUM_RACKS):
+            x_coor = self.EDGE_LENGTH*((self.TUBES_ALONG_X+1)*(rack + 0.5)-0.5)
+            rackNum = Text(Point(x_coor, y_coor), rack+1)
+            rackNum.setSize(20)
+            rackNum.draw(self.win)
 
         self.win.getMouse()
 
@@ -131,8 +148,8 @@ class trayStatusViewer:
             print("Tube out of bounds!")
 
 if __name__ == '__main__':
-    EDGE_LENGTH = 30
-    NUM_RACKS = 5
+    NUM_RACKS = 6
+    EDGE_LENGTH = 25 if NUM_RACKS == 6 else 30
     TUBES_ALONG_X = 8
     TUBES_ALONG_Y = 12
 
