@@ -27,7 +27,7 @@ def crop_rect(img, rect):
 
     return img_crop
 
-well = plt.imread('copy.jpg')
+well = plt.imread('testcrop.jpg')
 well = cv2.cvtColor(well, cv2.COLOR_RGB2GRAY)
 plt.subplot(151); plt.title('A')
 plt.imshow(well)
