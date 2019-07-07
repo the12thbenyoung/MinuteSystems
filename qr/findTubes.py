@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from processImage import processMatrix
 
-img = cv2.imread('qrtestphone.jpg')
+img = cv2.imread('qrtestphone2.jpg')
 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 x, thr = cv2.threshold(gray, 0.4 * gray.max(), 255, cv2.THRESH_BINARY)

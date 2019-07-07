@@ -11,9 +11,9 @@ ap.add_argument("-i", "--image", required=True,
 args = vars(ap.parse_args())
 print(args)
 
-for i in range(100):
-    image = cv2.imread(args["image"])
-    barcodes = decode(image)
+# for i in range(100):
+image = cv2.imread(args["image"])
+barcodes = decode(image)
 
 print(barcodes)
 print(len(barcodes))

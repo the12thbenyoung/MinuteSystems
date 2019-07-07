@@ -36,7 +36,7 @@ def processMatrix(img):
     harris = cv2.cornerHarris(well, 6, 1, 0.00)
 
     #binary threshold
-    x, thr = cv2.threshold(harris, 0.1 * harris.max(), 255, cv2.THRESH_BINARY)
+    x, thr = cv2.threshold(harris, 0.01 * harris.max(), 255, cv2.THRESH_BINARY)
     thr = thr.astype('uint8')
 
     #get outer contour of data matrix
