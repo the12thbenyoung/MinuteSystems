@@ -5,3 +5,5 @@ graphics.py
 __pycache__/
 #.swp files created by vim
 *.swp
+#image folder
+/qr/images

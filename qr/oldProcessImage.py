@@ -2,9 +2,9 @@
 #https://jdhao.github.io/2019/02/23/crop_rotated_rectangle_opencv/
 #https://stackoverflow.com/questions/44926316/how-to-locate-and-read-data-matrix-code-with-python
 
+import matplotlib.pyplot as plt
 import numpy as np
 import cv2
-from pylibdmtx.pylibdmtx import decode
 
 def crop_rect(img, rect):
     # get the parameter of the small rectangle
@@ -28,24 +28,43 @@ def crop_rect(img, rect):
     return img_crop
 
 def processMatrix(img):
-    # well = plt.imread('images/testcrop9.jpg')
-    # # well = plt.imread('copy.jpg')
-    well = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    well = plt.imread('images/testcrop9.jpg')
+    # well = plt.imread('copy.jpg')
+    well = cv2.cvtColor(well, cv2.COLOR_BGR2GRAY)
+    plt.subplot(151); plt.title('A')
+    plt.imshow(well)
 
-    #detect corners
-    harris = cv2.cornerHarris(well, 6, 1, 0.00)
+    harris = cv2.cornerHarris(well,6, 1,0.00)
+    plt.subplot(152); plt.title('B')
+    plt.imshow(harris)
 
-    #binary threshold
     x, thr = cv2.threshold(harris, 0.1 * harris.max(), 255, cv2.THRESH_BINARY)
     thr = thr.astype('uint8')
+    plt.subplot(153); plt.title('C')
+    plt.imshow(thr)
 
-    #get outer contour of data matrix
     contours, hierarchy = cv2.findContours(thr.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     areas = list(map(lambda x: cv2.contourArea(cv2.convexHull(x)), contours))
     max_i = areas.index(max(areas))
-    # d = cv2.drawContours(np.zeros_like(thr), contours, max_i, 255, 1)
+    d = cv2.drawContours(np.zeros_like(thr), contours, max_i, 255, 1)
+    plt.subplot(154); plt.title('D')
+    plt.imshow(d)
 
-    matrix = crop_rect(well, cv2.minAreaRect(contours[max_i]))
+    rect = cv2.minAreaRect(contours[max_i])
 
-    data = decode(matrix)
-    return data
+    e = crop_rect(well, rect)
+    cv2.imwrite("rect_crop.jpg", e)
+
+    # box = cv2.boxPoints(rect)
+    # x_dim = np.int0(pythagoras(box[0],box[2]))
+    # y_dim = np.int0(pythagoras(box[1],box[3]))
+    # new_image = np.zeros((x_dim, y_dim))
+
+    # box = np.int0(box)
+    # e= cv2.drawContours(well,[box],0,1,1)
+
+    plt.subplot(155); plt.title('E')
+    plt.imshow(e)
+
+    plt.show()
+

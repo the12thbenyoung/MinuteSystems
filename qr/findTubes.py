@@ -3,8 +3,9 @@
 
 import cv2
 import numpy as np
+from processImage import processMatrix
 
-img = cv2.imread('qrtestphone2.jpg')
+img = cv2.imread('qrtestphone.jpg')
 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 x, thr = cv2.threshold(gray, 0.4 * gray.max(), 255, cv2.THRESH_BINARY)
@@ -17,26 +18,25 @@ thr = 255 - thr
 contours, hierarchy = cv2.findContours(thr.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
 i = 0
-for c in contours:
-    if i == 0:
-        rect = cv2.boundingRect(c)
-        x, y, w, h = rect
-        if 80 < w and 150 > w and 80 < h and 150 > h:
-            print(rect)
-            # cv2.rectangle(img, (x,y), (x+w, y+h), (0,255,0), 2)
-            img_crop= img[y:y+h, x:x+w]
-            cv2.imwrite('testcrop.jpg', img_crop)
+for contour in contours:
+    #smallest non-rotated bounding rectangle
+    rect = cv2.boundingRect(contour)
+    x, y, w, h = rect
+
+    #hopefully only the tube contours are this square and this big
+    if 80 < w and 160 > w and 80 < h and 160 > h:
+        # cv2.rectangle(img, (x,y), (x+w, y+h), (0,255,0), 2)
+        img_crop= img[y:y+h, x:x+w]
+
+        data = processMatrix(img_crop)
+        print(data)
+        if data:
             i = i + 1
+        # cv2.imwrite('images/testcrop{}.jpg'.format(i), img_crop)
 
 print(i)
 
 # cv2.imshow("contours", img)
 
-# areas = list(map(lambda x: cv2.contourArea(cv2.convexHull(x)), contours))
-# max_i = areas.index(max(areas))
-# d = cv2.drawContours(np.zeros_like(thr), contours, max_i, 255, 1)
-# cv2.imshow('test', d)
-
-
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
