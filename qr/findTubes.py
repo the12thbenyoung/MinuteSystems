@@ -6,7 +6,10 @@ import numpy as np
 from processImage import processMatrix
 
 #max number of pixels of different between y coordinates for tubes to be considered in same row
-SAME_ROW_THRESHOLD = 30
+SAME_ROW_THRESHOLD = 70
+
+NUM_ROWS = 8
+NUM_COLS = 12
 
 img = cv2.imread('qrtestphone2.jpg')
 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -23,12 +26,12 @@ contours, hierarchy = cv2.findContours(thr.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_
 img_copy = img.copy()
 
 #each set holds a group of points with similar y-coordinate - corresponding to one row in the rack
-rowLists = [[] for i in range(8)]
-#keep track of how many lists in rowLists have at least one member
-rowsFound = 0
+rowLists = []
 #dict to associate (x,y) coordinate pairs with decoded outputs.
 #get hash value with 100*x + y
 coorToData = {}
+#tuples of (indices, decoded data)
+dataIndices = []
 
 i = 0
 #smallest and largest x-coordinate found
@@ -46,7 +49,7 @@ for contour in contours:
         data = processMatrix(img_crop)
         if data:    
             #add decoded data to coordinate-data dict
-            coorToData[hash((x,y))] = data.data
+            coorToData[hash((x,y))] = data[0].data
 
             if x > maxX:
                 maxX = x
@@ -55,30 +58,36 @@ for contour in contours:
 
             newRow = True
             #add (x,y) tuple from rect to its row, depending on its y-coordinate
-            for row in range(rowsFound):
+            for row in rowLists:
                 #put tube in row if its y coordinate is close enough to that of first member
-                if abs(y - rowLists[row][1]) < SAME_ROW_THRESHOLD:
-                    rowLists[row].append((x,y))
+                if abs(y - row[0][1]) < SAME_ROW_THRESHOLD:
+                    row.append((x,y))
                     newRow = False
             #put this in its own row if we haven't found one it fits in
-            if newRow and rowsFound < 8:
-               rowLists[rowsFound].append((x,y))
-               rowsFound += 1
+            if newRow and len(rowLists) < NUM_ROWS:
+               rowLists.append([(x,y)])
 
-            i = += 1
+            i += 1
 
 #approx horizontal distance between each tube
-horizDist = (maxX - minX)/7
+horizDist = (maxX - minX)/(NUM_COLS-1)
+
+#sort by y-pixel of first element to find order of rows
+rowLists.sort(key = (lambda row: row[0][1]))
+
+for row in rowLists:
+    print(row)
 
 #for each found row, determine x index by distance from minX
+for row in range(len(rowLists)):
+    y_index = row + 1
+    for tube in rowLists[row]:
+        x_index = int(np.round((tube[0] - minX)/horizDist)) + 1
+        dataIndices.append(((x_index, y_index), coorToData[hash((tube[0], tube[1]))]))
 
+print(dataIndices)
 
 print(i)
-cv2.imshow("contours", img_copy)
-# cv2.imwrite('contours.jpg', img_copy)
-
-cv2.waitKey(0)
-cv2.destroyAllWindows()
 
 #for drawing numbers on image
 def annotateImage(img, data):
