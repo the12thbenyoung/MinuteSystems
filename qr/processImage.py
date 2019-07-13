@@ -30,10 +30,7 @@ def crop_rect(img, rect):
 def processMatrix(img):
     # well = plt.imread('images/testcrop9.jpg')
     # # well = plt.imread('copy.jpg')
-    well = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    #detect corners
-    harris = cv2.cornerHarris(well, 6, 1, 0.00)
 
     #binary threshold
     x, thr = cv2.threshold(harris, 0.01 * harris.max(), 255, cv2.THRESH_BINARY)
@@ -49,3 +46,8 @@ def processMatrix(img):
 
     data = decode(matrix)
     return data
+
+#for drawing numbers on image
+def annotateImage(img, data):
+    cv2.putText(img, str(data[0].data), (x,y+70), cv2.FONT_HERSHEY_PLAIN, 1, (0,255,0), thickness=2)
+    cv2.rectangle(img, (x,y), (x+w, y+h), (0,255,0), 2)
