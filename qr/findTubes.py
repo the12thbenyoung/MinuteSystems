@@ -5,14 +5,16 @@ import cv2
 import numpy as np
 from pylibdmtx.pylibdmtx import decode
 
+SHOW_IMAGES = False
+
 #max number of pixels of different between y coordinates for tubes to be considered in same row
 SAME_ROW_THRESHOLD = 70
 
 NUM_ROWS = 8
 NUM_COLS = 12
 
-RACK_THRESH_FACTOR = 0.7
-TUBES_THRESH_FACTOR = 0.5
+RACK_THRESH_FACTOR = 0.75
+TUBES_THRESH_FACTOR = 0.45
 HARRIS_THRESH_FACTOR = 0.01
 
 HARRIS_BLOCK_SIZE = 6
@@ -24,10 +26,14 @@ EDGE_UPPER_BOUND = 190
 
 def show_image_small(name, img):
     cv2.imshow(name, cv2.resize(img, (int(img.shape[1]/5), int(img.shape[0]/5)), interpolation=cv2.INTER_AREA))
+    cv2.waitKey(0)
 
 def crop_rect(img, mask, threshFactor):
     x, thr = cv2.threshold(mask, threshFactor * mask.max(), 255, cv2.THRESH_BINARY)
     thr = thr.astype('uint8')
+
+    if SHOW_IMAGES:
+        cv2.imshow('thr', thr)
 
     #get outer contour of data matrix
     contours, _ = cv2.findContours(thr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -55,17 +61,29 @@ def crop_rect(img, mask, threshFactor):
     # now rotated rectangle becomes vertical and we crop it
     img_crop = cv2.getRectSubPix(img_rot, size, center)
 
+    if SHOW_IMAGES:
+        cv2.imshow('crop', img_crop)
+        cv2.waitKey(0)
+
     return img_crop
 
-def process_matrix(img, blockSize, threshFactor):
+def process_matrix(img, blockSize, threshFactor, i):
     #detect corners
     harris = cv2.cornerHarris(img, HARRIS_BLOCK_SIZE, 1, 0.00)
 
     #crop out matrix from tube
     matrix = crop_rect(img, harris, threshFactor)
 
-    #decode data matrix
-    return decode(matrix)
+    # cv2.imwrite('images/tube{}.jpg'.format(i), matrix)
+
+    #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
+    #can use this to filter out some of them
+    height, width = matrix.shape[0], matrix.shape[1]
+    if height/width < 1.5 and width/height < 1.5:
+        return decode(matrix)
+    else:
+        # print('zoinks')
+        return None
 
 if __name__ == '__main__':
     img = cv2.imread('tubesmissing.jpg')
@@ -77,6 +95,9 @@ if __name__ == '__main__':
     rack = crop_rect(gray, gray, RACK_THRESH_FACTOR)
     x, rack_thr = cv2.threshold(rack, TUBES_THRESH_FACTOR * rack.max(), 255, cv2.THRESH_BINARY)
     rack_thr = 255 - rack_thr
+
+    # show_image_small('rack_thr', rack_thr)
+    # exit(0)
 
     #get contours around tubes
     contours, hierarchy = cv2.findContours(rack_thr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -101,31 +122,33 @@ if __name__ == '__main__':
         #hopefully only the tube contours are this square and this big
         if all([EDGE_LOWER_BOUND < dim and EDGE_UPPER_BOUND > dim for dim in [w,h]]):
             tube = rack[y:y+h, x:x+w]
-            cv2.imwrite('images/tube{}.jpg'.format(i), tube)
 
-            #read data from data matrix
-            data = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR)
+            if SHOW_IMAGES:
+                cv2.imshow('tube', tube)
 
-            if data:    
+            data = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR, i)
+
+            if data:
                 i += 1
-                #add decoded data to coordinate-data dict
-                coorToData[hash((x,y))] = data[0].data
 
-                if x > maxX:
-                    maxX = x
-                elif x < minX:
-                    minX = x
+            #add decoded data to coordinate-data dict
+            coorToData[hash((x,y))] = data[0].data if data else 0
 
-                newRow = True
-                #add (x,y) tuple from rect to its row, depending on its y-coordinate
-                for row in rowLists:
-                    #put tube in row if its y coordinate is close enough to that of first member
-                    if abs(y - row[0][1]) < SAME_ROW_THRESHOLD:
-                        row.append((x,y))
-                        newRow = False
-                #put this in its own row if we haven't found one it fits in
-                if newRow and len(rowLists) < NUM_ROWS:
-                   rowLists.append([(x,y)])
+            if x > maxX:
+                maxX = x
+            elif x < minX:
+                minX = x
+
+            newRow = True
+            #add (x,y) tuple from rect to its row, depending on its y-coordinate
+            for row in rowLists:
+                #put tube in row if its y coordinate is close enough to that of first member
+                if abs(y - row[0][1]) < SAME_ROW_THRESHOLD:
+                    row.append((x,y))
+                    newRow = False
+            #put this in its own row if we haven't found one it fits in
+            if newRow: #and len(rowLists) < NUM_ROWS:
+               rowLists.append([(x,y)])
 
 
     #approx horizontal distance between each tube
@@ -140,6 +163,9 @@ if __name__ == '__main__':
         for tube in rowLists[row]:
             x_index = int(np.round((tube[0] - minX)/horizDist)) + 1
             dataIndices.append(((x_index, y_index), coorToData[hash((tube[0], tube[1]))]))
+
+    #sort dataIndices by x coordinate, then y
+    dataIndices.sort(key = (lambda x: x[0][0]*1000 + x[0][1]))
 
     print(dataIndices)
 
