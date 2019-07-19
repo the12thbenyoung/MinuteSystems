@@ -5,6 +5,8 @@ import cv2
 import numpy as np
 from pylibdmtx.pylibdmtx import decode
 
+FILENAME = 'tubesgood.jpg'
+
 SHOW_IMAGES = False
 
 #max number of pixels of different between y coordinates for tubes to be considered in same row
@@ -17,18 +19,21 @@ NUM_COLS = 12
 #for cropping rack from original image
 RACK_THRESH_FACTOR = 0.75
 #for cropping tube area (tube+rims/shadows) from rack
-TUBE_AREA_THRESH_FACTOR = 0.4
+TUBE_AREA_THRESH_FACTOR = 0.3
 #for cropping just circular tube from tube area
 TUBE_THRESH_FACTOR = 0.82
 #for cropping data matrix from harris corner heatmap image
 HARRIS_THRESH_FACTOR = 0.01
 
 #size of box used in harris corner algorithm
-HARRIS_BLOCK_SIZE = 9
+HARRIS_BLOCK_SIZE = 6
 
 #typical edge lengths of contour bounding boxes of tube areas
-EDGE_LOWER_BOUND = 90
-EDGE_UPPER_BOUND = 190
+EDGE_LOWER_BOUND = 150
+EDGE_UPPER_BOUND = 200
+
+#approx pixel edge length of perfectly cropped matrix
+MATRIX_SIZE_UPPER_BOUND = 95
 
 #smallest expected area of a contour containing a matrix in the harris image
 MIN_MATRIX_CONTOUR_AREA = 4000
@@ -88,7 +93,7 @@ def crop_smallest_rect(img, contour):
 
     return img_crop
 
-#like crop_smallest_rect, but bounding rect isn't rotated and thus can be cropped directly
+# like crop_smallest_rect, but bounding rect isn't rotated and thus can be cropped directly
 #param edge_pix is the number of extra pixels to crop on each sied inside bounding rect
 def crop_bounding_rect(img, contour, edge_pix):
     rect = cv2.boundingRect(contour)
@@ -107,12 +112,25 @@ def process_matrix(img, blockSize, threshFactor, i):
     #if area is too small, threshFactor was too high (didn't find whole matrix),
     #so lower it and try again
     while contourArea[0] < MIN_MATRIX_CONTOUR_AREA and threshFactor > 0:
-        threshFactor -= 0.1
+        threshFactor -= 0.002
         contour = find_largest_contour(harris, threshFactor)
         contourArea = cv2.contourArea(cv2.convexHull(contour)),
 
+    #if threshFactor reached 0, we haven't found the matrix, so it likely isn't there
+    if threshFactor <= 0:
+        return None
+
     #crop out matrix from tube
     matrix = crop_smallest_rect(img, contour)
+    #keep raising threshold until matrix becomes sufficiently small, meaning
+    #it's been cropped to just the matrix and not the surrounding numbers
+    while any([dim > MATRIX_SIZE_UPPER_BOUND
+              for dim in [matrix.shape[0], matrix.shape[1]]]) and threshFactor < 1:
+        threshFactor += 0.002
+        # print(threshFactor)
+        contour = find_largest_contour(harris, threshFactor)
+        contourArea = cv2.contourArea(cv2.convexHull(contour)),
+        matrix = crop_smallest_rect(img, contour)
 
     #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
     #can use this to filter out some of them
@@ -124,7 +142,7 @@ def process_matrix(img, blockSize, threshFactor, i):
         return None
 
 if __name__ == '__main__':
-    img = cv2.imread('qrphone.jpg')
+    img = cv2.imread(FILENAME)
 
     #convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -169,14 +187,16 @@ if __name__ == '__main__':
             tube_inv = 255 - tubeArea
             tubeContour = find_largest_contour(tube_inv, TUBE_THRESH_FACTOR)
             tube = crop_bounding_rect(tubeArea, tubeContour, 5)
+            cv2.imwrite(f'images/tube{i}.jpg', tubeArea)
 
             if SHOW_IMAGES:
                 cv2.imshow('tube', tube)
 
             data = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR, i)
 
+            i += 1
             if data:
-                i += 1
+                pass
 
             #add decoded data to coordinate-data dict
             coorToData[hash((x,y))] = data[0].data if data else 0
