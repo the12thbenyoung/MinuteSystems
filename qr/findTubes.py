@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from pylibdmtx.pylibdmtx import decode
 
-FILENAME = 'tubesgood.jpg'
+FILENAME = 'tubesgood2.jpg'
 
 SHOW_IMAGES = False
 
@@ -17,13 +17,13 @@ NUM_ROWS = 8
 NUM_COLS = 12
 
 #for cropping rack from original image
-RACK_THRESH_FACTOR = 0.75
+RACK_THRESH_FACTOR = 0.85
 #for cropping tube area (tube+rims/shadows) from rack
-TUBE_AREA_THRESH_FACTOR = 0.3
+TUBE_AREA_THRESH_FACTOR = 0.4
 #for cropping just circular tube from tube area
-TUBE_THRESH_FACTOR = 0.82
+TUBE_THRESH_FACTOR = 0.7
 #for cropping data matrix from harris corner heatmap image
-HARRIS_THRESH_FACTOR = 0.005
+HARRIS_THRESH_FACTOR = 0.02
 #for removing surrounding numbers but keeping data matrix
 NUMBERS_THRESH_FACTOR = 0.38
 
@@ -31,12 +31,12 @@ NUMBERS_THRESH_FACTOR = 0.38
 HARRIS_BLOCK_SIZE = 6
 
 #typical edge lengths of contour bounding boxes of tube areas
-EDGE_LOWER_BOUND = 150
+EDGE_LOWER_BOUND = 120
 EDGE_UPPER_BOUND = 200
 
 #approx pixel edge length of perfectly cropped matrix
-MATRIX_SIZE_LOWER_BOUND = 84
-MATRIX_SIZE_UPPER_BOUND = 95
+MATRIX_SIZE_LOWER_BOUND = 76
+MATRIX_SIZE_UPPER_BOUND = 85
 
 #smallest expected area of a contour containing a matrix in the harris image
 MIN_MATRIX_CONTOUR_AREA = 4000
@@ -44,6 +44,14 @@ MIN_MATRIX_CONTOUR_AREA = 4000
 #amount to adjust HARRIS_THRESH_FACTOR by when trying to crop matrix
 THRESH_INCREMENT_UP = 0.003
 THRESH_INCREMENT_DOWN = 0.001
+
+#pixel dimension of kernel square
+MORPHOLOGY_KERNEL_SIZE=3
+#kernel for morphology
+morphologyKernel = np.ones((MORPHOLOGY_KERNEL_SIZE, MORPHOLOGY_KERNEL_SIZE), np.uint8)
+
+DILATION_KERNEL_SIZE=2
+dilationKernel = np.ones((DILATION_KERNEL_SIZE, DILATION_KERNEL_SIZE), np.uint8)
 
 def show_image_small(name, img):
     cv2.imshow(name, cv2.resize(img, (int(img.shape[1]/5), int(img.shape[0]/5)), interpolation=cv2.INTER_AREA))
@@ -114,7 +122,8 @@ def process_matrix(img, blockSize, threshFactor, i):
     _, thr = cv2.threshold(img, NUMBERS_THRESH_FACTOR* img.max(), 255, cv2.THRESH_BINARY)
 
     #detect corners
-    harris = cv2.cornerHarris(thr, HARRIS_BLOCK_SIZE, 1, 0.00)
+    opening = cv2.morphologyEx(thr, cv2.MORPH_OPEN, morphologyKernel)
+    harris = cv2.cornerHarris(opening, HARRIS_BLOCK_SIZE, 1, 0.00)
   
     contour = find_largest_contour(harris, threshFactor)
     contourArea = cv2.contourArea(cv2.convexHull(contour)),
@@ -127,34 +136,38 @@ def process_matrix(img, blockSize, threshFactor, i):
     matrix = crop_smallest_rect(img, contour)
     height, width = matrix.shape[0], matrix.shape[1]
 
-    #keep raising threshold until matrix becomes sufficiently small, meaning
-    #it's been cropped to just the matrix and not the surrounding numbers
-    while any([dim > MATRIX_SIZE_UPPER_BOUND
-              for dim in [height, width]]) and threshFactor < 1:
-        threshFactor += THRESH_INCREMENT_UP
-        contour = find_largest_contour(harris, threshFactor)
-        contourArea = cv2.contourArea(cv2.convexHull(contour)),
-        matrix = crop_smallest_rect(img, contour)
-        height, width = matrix.shape[0], matrix.shape[1]
+    ##keep raising threshold until matrix becomes sufficiently small, meaning
+    ##it's been cropped to just the matrix and not the surrounding numbers
+    #while any([dim > MATRIX_SIZE_UPPER_BOUND
+    #          for dim in [height, width]]) and threshFactor < 1:
+    #    threshFactor += THRESH_INCREMENT_UP
+    #    contour = find_largest_contour(harris, threshFactor)
+    #    contourArea = cv2.contourArea(cv2.convexHull(contour)),
+    #    matrix = crop_smallest_rect(img, contour)
+    #    height, width = matrix.shape[0], matrix.shape[1]
 
     #if matrix is too small, threshFactor was too high (didn't find whole matrix),
     #so lower it and try again
+    iters = 0
     while any([dim < MATRIX_SIZE_LOWER_BOUND
-              for dim in [height, width]]) and threshFactor > 0:
-        threshFactor -= THRESH_INCREMENT_DOWN
+               for dim in [height, width]]) and iters < 10:
+        harris = cv2.dilate(harris, dilationKernel, iterations=1)
         contour = find_largest_contour(harris, threshFactor)
         contourArea = cv2.contourArea(cv2.convexHull(contour)),
         matrix = crop_smallest_rect(img, contour)
         height, width = matrix.shape[0], matrix.shape[1]
+        iters += 1
 
+    # cv2.imshow('matrix', matrix)
+    # cv2.waitKey(0)
 
     #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
     #can use this to filter out some of them
     if height/width < 1.5 and width/height < 1.5:
-        return decode(matrix)
+        return decode(matrix), matrix
     else:
         print('zoinks')
-        return None
+        return None, matrix
 
 if __name__ == '__main__':
     img = cv2.imread(FILENAME)
@@ -207,10 +220,14 @@ if __name__ == '__main__':
             if SHOW_IMAGES:
                 cv2.imshow('tube', tube)
 
-            data = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR, i)
+            data, matrix = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR, i)
 
             if data:
                 i += 1
+            else:
+                print('zoinks')
+                cv2.imshow('bad', matrix)
+                cv2.waitKey(0)
 
             #add decoded data to coordinate-data dict
             coorToData[hash((x,y))] = data[0].data if data else 0
