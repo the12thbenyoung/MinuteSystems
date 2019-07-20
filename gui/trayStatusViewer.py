@@ -1,6 +1,7 @@
 from graphics import *
 import numpy as np
 from makeTestInput import writeInput
+from PIL import Image
 
 #tube statuses
 ABSENT = 0
@@ -99,7 +100,7 @@ class trayStatusViewer:
             rackNum.setSize(20)
             rackNum.draw(self.win)
 
-        self.win.getMouse()
+        # self.win.getMouse()
 
     #read from files to determine which tubes start as ABSENT, PRESENT, or TARGET and color accordingly
     def newTray(self, locationsFilename, targetsFilename):
@@ -167,4 +168,9 @@ if __name__ == '__main__':
         rack, x, y = map(lambda x: int(x)-1, target.split(','))
         viewer.pickTube(rack, x, y)
         target = input('Enter coordinates <rack>,<x>,<y>: ')
+
+    viewer.win.postscript(file='img.eps', colormode='color')
+    img = Image.open('img.eps')
+    img.save('tray.jpg', 'jpeg')
+
 
