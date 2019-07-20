@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
-from findTubes import process_matrix, find_largest_contour
+from findTubes import process_matrix, find_largest_contour, crop_smallest_rect
 
 from pylibdmtx.pylibdmtx import decode
 
@@ -18,15 +18,8 @@ _, thr = cv2.threshold(gray, 0.4* gray.max(), 255, cv2.THRESH_BINARY)
 #detect corners
 harris = cv2.cornerHarris(thr, 6, 1, 0.00)
 
-contour = find_largest_contour(harris, threshFactor)
+contour = find_largest_contour(harris, 0.01)
 contourArea = cv2.contourArea(cv2.convexHull(contour)),
-
-#if area is too small, threshFactor was too high (didn't find whole matrix),
-#so lower it and try again
-while contourArea[0] < MIN_MATRIX_CONTOUR_AREA and threshFactor > 0:
-    threshFactor -= 0.002
-    contour = find_largest_contour(harris, threshFactor)
-    contourArea = cv2.contourArea(cv2.convexHull(contour)),
 
 #crop out matrix from tube
 matrix = crop_smallest_rect(img, contour)

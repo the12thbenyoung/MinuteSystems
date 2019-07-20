@@ -23,7 +23,9 @@ TUBE_AREA_THRESH_FACTOR = 0.3
 #for cropping just circular tube from tube area
 TUBE_THRESH_FACTOR = 0.82
 #for cropping data matrix from harris corner heatmap image
-HARRIS_THRESH_FACTOR = 0.01
+HARRIS_THRESH_FACTOR = 0.005
+#for removing surrounding numbers but keeping data matrix
+NUMBERS_THRESH_FACTOR = 0.38
 
 #size of box used in harris corner algorithm
 HARRIS_BLOCK_SIZE = 6
@@ -33,10 +35,15 @@ EDGE_LOWER_BOUND = 150
 EDGE_UPPER_BOUND = 200
 
 #approx pixel edge length of perfectly cropped matrix
+MATRIX_SIZE_LOWER_BOUND = 84
 MATRIX_SIZE_UPPER_BOUND = 95
 
 #smallest expected area of a contour containing a matrix in the harris image
 MIN_MATRIX_CONTOUR_AREA = 4000
+
+#amount to adjust HARRIS_THRESH_FACTOR by when trying to crop matrix
+THRESH_INCREMENT_UP = 0.003
+THRESH_INCREMENT_DOWN = 0.001
 
 def show_image_small(name, img):
     cv2.imshow(name, cv2.resize(img, (int(img.shape[1]/5), int(img.shape[0]/5)), interpolation=cv2.INTER_AREA))
@@ -103,18 +110,14 @@ def crop_bounding_rect(img, contour, edge_pix):
     return img_crop
 
 def process_matrix(img, blockSize, threshFactor, i):
+    #hopefully remove numbers while keeping matrix
+    _, thr = cv2.threshold(img, NUMBERS_THRESH_FACTOR* img.max(), 255, cv2.THRESH_BINARY)
+
     #detect corners
-    harris = cv2.cornerHarris(img, HARRIS_BLOCK_SIZE, 1, 0.00)
+    harris = cv2.cornerHarris(thr, HARRIS_BLOCK_SIZE, 1, 0.00)
   
     contour = find_largest_contour(harris, threshFactor)
     contourArea = cv2.contourArea(cv2.convexHull(contour)),
-
-    #if area is too small, threshFactor was too high (didn't find whole matrix),
-    #so lower it and try again
-    while contourArea[0] < MIN_MATRIX_CONTOUR_AREA and threshFactor > 0:
-        threshFactor -= 0.002
-        contour = find_largest_contour(harris, threshFactor)
-        contourArea = cv2.contourArea(cv2.convexHull(contour)),
 
     #if threshFactor reached 0, we haven't found the matrix, so it likely isn't there
     if threshFactor <= 0:
@@ -122,23 +125,35 @@ def process_matrix(img, blockSize, threshFactor, i):
 
     #crop out matrix from tube
     matrix = crop_smallest_rect(img, contour)
+    height, width = matrix.shape[0], matrix.shape[1]
+
     #keep raising threshold until matrix becomes sufficiently small, meaning
     #it's been cropped to just the matrix and not the surrounding numbers
     while any([dim > MATRIX_SIZE_UPPER_BOUND
-              for dim in [matrix.shape[0], matrix.shape[1]]]) and threshFactor < 1:
-        threshFactor += 0.002
-        # print(threshFactor)
+              for dim in [height, width]]) and threshFactor < 1:
+        threshFactor += THRESH_INCREMENT_UP
         contour = find_largest_contour(harris, threshFactor)
         contourArea = cv2.contourArea(cv2.convexHull(contour)),
         matrix = crop_smallest_rect(img, contour)
+        height, width = matrix.shape[0], matrix.shape[1]
+
+    #if matrix is too small, threshFactor was too high (didn't find whole matrix),
+    #so lower it and try again
+    while any([dim < MATRIX_SIZE_LOWER_BOUND
+              for dim in [height, width]]) and threshFactor > 0:
+        threshFactor -= THRESH_INCREMENT_DOWN
+        contour = find_largest_contour(harris, threshFactor)
+        contourArea = cv2.contourArea(cv2.convexHull(contour)),
+        matrix = crop_smallest_rect(img, contour)
+        height, width = matrix.shape[0], matrix.shape[1]
+
 
     #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
     #can use this to filter out some of them
-    height, width = matrix.shape[0], matrix.shape[1]
     if height/width < 1.5 and width/height < 1.5:
         return decode(matrix)
     else:
-        # print('zoinks')
+        print('zoinks')
         return None
 
 if __name__ == '__main__':
@@ -194,9 +209,8 @@ if __name__ == '__main__':
 
             data = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR, i)
 
-            i += 1
             if data:
-                pass
+                i += 1
 
             #add decoded data to coordinate-data dict
             coorToData[hash((x,y))] = data[0].data if data else 0
