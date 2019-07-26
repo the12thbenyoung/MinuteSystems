@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from pylibdmtx.pylibdmtx import decode
 
-FILENAME = 'badgoodtest.jpg'
+FILENAME = 'topkek.jpg'
 
 SHOW_IMAGES = False
 
@@ -17,15 +17,17 @@ NUM_ROWS = 8
 NUM_COLS = 12
 
 #for cropping rack from original image
-RACK_THRESH_FACTOR = 0.8
+RACK_THRESH_FACTOR = 0.6
 #for cropping tube area (tube+rims/shadows) from rack
-TUBE_AREA_THRESH_FACTOR = 0.27
+TUBE_AREA_THRESH_FACTOR = 0.26
 #for cropping just circular tube from tube area
-TUBE_THRESH_FACTOR = 0.7
+TUBE_THRESH_FACTOR = 0.6
 #for cropping data matrix from harris corner heatmap image
 HARRIS_THRESH_FACTOR = 0.01
 #for removing surrounding numbers but keeping data matrix
 NUMBERS_THRESH_FACTOR = 0.35
+#for thresholding matrix after it's been cropped from tube
+MATRIX_THRESH_FACTOR = 0.4
 
 #size of box used in harris corner algorithm
 HARRIS_BLOCK_SIZE = 6
@@ -170,6 +172,7 @@ def process_matrix(img, blockSize, threshFactor, i):
     #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
     #can use this to filter out some of them
     if height/width < 1.5 and width/height < 1.5:
+        #threshold again to fix a couple problem cases
         return decode(matrix), matrix
     else:
         print('zoinks scoob thats a bad aspect ratio')
@@ -181,9 +184,15 @@ if __name__ == '__main__':
     #convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    rackContour = find_largest_contour(gray, RACK_THRESH_FACTOR)
-    #crop to just rack 
-    rack = crop_smallest_rect(gray, rackContour, 0)
+    #--------------------------------------------------------------------------
+    #ALERT ALERT WE HAVE AN FORTNITE GAMER IN THE AREA ALERT 
+    #__________________________________________________________________________
+
+
+    #rackContour = find_largest_contour(gray, RACK_THRESH_FACTOR)
+    ##crop to just rack 
+    #rack = crop_smallest_rect(gray, rackContour, 0)
+    rack = gray
 
     #threshold and invert to get tubes in white
     x, rack_thr = cv2.threshold(rack, TUBE_AREA_THRESH_FACTOR * rack.max(), 255, cv2.THRESH_BINARY)
@@ -221,7 +230,7 @@ if __name__ == '__main__':
             tube_inv = 255 - tubeArea
             tubeContour = find_largest_contour(tube_inv, TUBE_THRESH_FACTOR)
             tube = crop_bounding_rect(tubeArea, tubeContour, 5)
-
+            
             if SHOW_IMAGES:
                 cv2.imshow('tube', tube)
 
@@ -235,8 +244,15 @@ if __name__ == '__main__':
                 if data:
                     i += 1
                 else:
-                    print('zoinks')
-                    cv2.imwrite(f'images/badkek{i}.jpg', tube)
+                    #try again, but threshold tube
+                    x, tube_thr = cv2.threshold(tube, MATRIX_THRESH_FACTOR * tube.max(), 255, cv2.THRESH_BINARY)
+                    data = decode(tube_thr)
+                    if data:
+                        i += 1
+                    else:
+                        print('zoinks')
+                        cv2.imwrite(f'images/badkek{i}.jpg', tube)
+                        # cv2.putText(img, 'no bueno', (x,y), cv2.FONT_HERSHEY_PLAIN, 5, (255,0,0), thickness=3)
 
             #add decoded data to coordinate-data dict
             coorToData[hash((x,y))] = data[0].data if data else 0
@@ -257,6 +273,7 @@ if __name__ == '__main__':
             if newRow: #and len(rowLists) < NUM_ROWS:
                rowLists.append([(x,y)])
 
+    show_image_small('img', img)
 
     #approx horizontal distance between each tube
     horizDist = (maxX - minX)/(NUM_COLS-1)
