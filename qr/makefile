@@ -1,5 +1,5 @@
 all:
-	python3 trayStatusViewer.py
+	python trayStatusViewer.py
 qr: 
-	python3 qrScanTest.py --image=qrtest.jpg
-	eog result.jpg
+	rm images/*
+	python findTubes.py
