@@ -33,8 +33,8 @@ MATRIX_THRESH_FACTOR = 0.4
 HARRIS_BLOCK_SIZE = 6
 
 #typical edge lengths of contour bounding boxes of tube areas
-EDGE_LOWER_BOUND = 120
-EDGE_UPPER_BOUND = 200
+EDGE_LOWER_BOUND = 140
+EDGE_UPPER_BOUND = 230
 
 #approx pixel edge length of perfectly cropped matrix
 MATRIX_SIZE_LOWER_BOUND = 85
@@ -84,9 +84,12 @@ def find_largest_contour(img, threshFactor):
     contours, _ = cv2.findContours(thr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
     areas = list(map(lambda x: cv2.contourArea(cv2.convexHull(x)), contours))
-    max_index = np.argmax(areas)
+    if areas:
+        max_index = np.argmax(areas)
+        return contours[max_index]
+    else:
+        return np.array([])
 
-    return contours[max_index]
 
 #find the minAreaRect around the largest light object in img, rotate and crop
 def crop_smallest_rect(img, contour, edgePix):
@@ -134,49 +137,55 @@ def process_matrix(img, blockSize, threshFactor, i):
     harris = cv2.cornerHarris(opening, HARRIS_BLOCK_SIZE, 1, 0.00)
   
     contour = find_largest_contour(harris, threshFactor)
-    contourArea = cv2.contourArea(cv2.convexHull(contour)),
-
-    #if threshFactor reached 0, we haven't found the matrix, so it likely isn't there
-    if threshFactor <= 0:
-        return None
-
-    #crop out matrix from tube
-    matrix = crop_smallest_rect(img, contour, MATRIX_EDGE_PIXELS)
-    height, width = matrix.shape[0], matrix.shape[1]
-
-    ##keep raising threshold until matrix becomes sufficiently small, meaning
-    ##it's been cropped to just the matrix and not the surrounding numbers
-    #while any([dim > MATRIX_SIZE_UPPER_BOUND
-    #          for dim in [height, width]]) and threshFactor < 1:
-    #    threshFactor += THRESH_INCREMENT_UP
-    #    contour = find_largest_contour(harris, threshFactor)
-    #    contourArea = cv2.contourArea(cv2.convexHull(contour)),
-    #    matrix = crop_smallest_rect(img, contour)
-    #    height, width = matrix.shape[0], matrix.shape[1]
-
-    #if matrix is too small, threshFactor was too high (didn't find whole matrix),
-    #so lower it and try again
-    iters = 0
-    while any([dim < MATRIX_SIZE_LOWER_BOUND
-               for dim in [height, width]]) and iters < MAX_DILATE_ITERS:
-        harris = cv2.dilate(harris, dilationKernel, iterations=1)
-        contour = find_largest_contour(harris, threshFactor)
+    if contour.any():
         contourArea = cv2.contourArea(cv2.convexHull(contour)),
+
+        #if threshFactor reached 0, we haven't found the matrix, so it likely isn't there
+        if threshFactor <= 0:
+            return None
+
+        #crop out matrix from tube
         matrix = crop_smallest_rect(img, contour, MATRIX_EDGE_PIXELS)
         height, width = matrix.shape[0], matrix.shape[1]
-        iters += 1
 
-    # cv2.imshow('matrix', matrix)
-    # cv2.waitKey(0)
+        ##keep raising threshold until matrix becomes sufficiently small, meaning
+        ##it's been cropped to just the matrix and not the surrounding numbers
+        #while any([dim > MATRIX_SIZE_UPPER_BOUND
+        #          for dim in [height, width]]) and threshFactor < 1:
+        #    threshFactor += THRESH_INCREMENT_UP
+        #    contour = find_largest_contour(harris, threshFactor)
+        #    contourArea = cv2.contourArea(cv2.convexHull(contour)),
+        #    matrix = crop_smallest_rect(img, contour)
+        #    height, width = matrix.shape[0], matrix.shape[1]
 
-    #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
-    #can use this to filter out some of them
-    if height/width < 1.5 and width/height < 1.5:
-        #threshold again to fix a couple problem cases
-        return decode(matrix), matrix
+        #if matrix is too small, threshFactor was too high (didn't find whole matrix),
+        #so lower it and try again
+        iters = 0
+        while any([dim < MATRIX_SIZE_LOWER_BOUND
+                   for dim in [height, width]]) and iters < MAX_DILATE_ITERS:
+            harris = cv2.dilate(harris, dilationKernel, iterations=1)
+            contour = find_largest_contour(harris, threshFactor)
+            if contour.any():
+                contourArea = cv2.contourArea(cv2.convexHull(contour)),
+                matrix = crop_smallest_rect(img, contour, MATRIX_EDGE_PIXELS)
+                height, width = matrix.shape[0], matrix.shape[1]
+                iters += 1
+            else:
+                break
+
+        # cv2.imshow('matrix', matrix)
+        # cv2.waitKey(0)
+
+        #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
+        #can use this to filter out some of them
+        if height/width < 1.5 and width/height < 1.5:
+            #threshold again to fix a couple problem cases
+            return decode(matrix), matrix
+        else:
+            print('zoinks scoob thats a bad aspect ratio')
+            return None, matrix
     else:
-        print('zoinks scoob thats a bad aspect ratio')
-        return None, matrix
+        return None, img
 
 if __name__ == '__main__':
     img = cv2.imread(FILENAME)
@@ -195,7 +204,10 @@ if __name__ == '__main__':
     rack = gray
 
     #threshold and invert to get tubes in white
-    x, rack_thr = cv2.threshold(rack, TUBE_AREA_THRESH_FACTOR * rack.max(), 255, cv2.THRESH_BINARY)
+    # x, rack_thr = cv2.threshold(rack, TUBE_AREA_THRESH_FACTOR * rack.max(), 255, cv2.THRESH_BINARY)
+    rack_blur = cv2.GaussianBlur(rack,(5,5),0)
+    rack_thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+                                       cv2.THRESH_BINARY,301,25)
     rack_thr = 255 - rack_thr
 
     # show_image_small('rack_thr', rack_thr)
@@ -229,7 +241,10 @@ if __name__ == '__main__':
             #crop again to just tube, trying to cut out surrounding shadow
             tube_inv = 255 - tubeArea
             tubeContour = find_largest_contour(tube_inv, TUBE_THRESH_FACTOR)
-            tube = crop_bounding_rect(tubeArea, tubeContour, 5)
+            if tubeContour.any():
+                tube = crop_bounding_rect(tubeArea, tubeContour, 5)
+            else:
+                continue
             
             if SHOW_IMAGES:
                 cv2.imshow('tube', tube)
@@ -272,8 +287,6 @@ if __name__ == '__main__':
             #put this in its own row if we haven't found one it fits in
             if newRow: #and len(rowLists) < NUM_ROWS:
                rowLists.append([(x,y)])
-
-    show_image_small('img', img)
 
     #approx horizontal distance between each tube
     horizDist = (maxX - minX)/(NUM_COLS-1)
