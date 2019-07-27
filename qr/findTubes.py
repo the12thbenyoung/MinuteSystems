@@ -17,11 +17,12 @@ NUM_ROWS = 8
 NUM_COLS = 12
 
 #for cropping rack from original image
-RACK_THRESH_FACTOR = 0.6
+RACK_THRESH_FACTOR = 0.75
 #for cropping tube area (tube+rims/shadows) from rack
 TUBE_AREA_THRESH_FACTOR = 0.26
+TUBE_AREA_THRESH_CONSTANT = 30
 #for cropping just circular tube from tube area
-TUBE_THRESH_FACTOR = 0.6
+TUBE_THRESH_FACTOR = 0.75
 #for cropping data matrix from harris corner heatmap image
 HARRIS_THRESH_FACTOR = 0.01
 #for removing surrounding numbers but keeping data matrix
@@ -33,8 +34,8 @@ MATRIX_THRESH_FACTOR = 0.4
 HARRIS_BLOCK_SIZE = 6
 
 #typical edge lengths of contour bounding boxes of tube areas
-EDGE_LOWER_BOUND = 140
-EDGE_UPPER_BOUND = 230
+EDGE_LOWER_BOUND = 150
+EDGE_UPPER_BOUND = 210
 
 #approx pixel edge length of perfectly cropped matrix
 MATRIX_SIZE_LOWER_BOUND = 85
@@ -60,6 +61,7 @@ MAX_DILATE_ITERS = 10
 
 #extra pixels added to edge of matrix crop
 MATRIX_EDGE_PIXELS = 4
+
 
 def show_image_small(name, img):
     cv2.imshow(name, cv2.resize(img, (int(img.shape[1]/5), int(img.shape[0]/5)), interpolation=cv2.INTER_AREA))
@@ -128,7 +130,7 @@ def crop_bounding_rect(img, contour, edge_pix):
     img_crop = img[y+edge_pix : y+h-edge_pix, x+edge_pix : x+w-edge_pix]
     return img_crop
 
-def process_matrix(img, blockSize, threshFactor, i):
+def process_matrix(img, blockSize, threshFactor):
     #hopefully remove numbers while keeping matrix
     _, thr = cv2.threshold(img, NUMBERS_THRESH_FACTOR* img.max(), 255, cv2.THRESH_BINARY)
 
@@ -142,7 +144,7 @@ def process_matrix(img, blockSize, threshFactor, i):
 
         #if threshFactor reached 0, we haven't found the matrix, so it likely isn't there
         if threshFactor <= 0:
-            return None
+            return None, img
 
         #crop out matrix from tube
         matrix = crop_smallest_rect(img, contour, MATRIX_EDGE_PIXELS)
@@ -179,7 +181,6 @@ def process_matrix(img, blockSize, threshFactor, i):
         #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
         #can use this to filter out some of them
         if height/width < 1.5 and width/height < 1.5:
-            #threshold again to fix a couple problem cases
             return decode(matrix), matrix
         else:
             print('zoinks scoob thats a bad aspect ratio')
@@ -188,15 +189,11 @@ def process_matrix(img, blockSize, threshFactor, i):
         return None, img
 
 if __name__ == '__main__':
+    tubesFound = 0
     img = cv2.imread(FILENAME)
 
     #convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    #--------------------------------------------------------------------------
-    #ALERT ALERT WE HAVE AN FORTNITE GAMER IN THE AREA ALERT 
-    #__________________________________________________________________________
-
 
     #rackContour = find_largest_contour(gray, RACK_THRESH_FACTOR)
     ##crop to just rack 
@@ -207,7 +204,7 @@ if __name__ == '__main__':
     # x, rack_thr = cv2.threshold(rack, TUBE_AREA_THRESH_FACTOR * rack.max(), 255, cv2.THRESH_BINARY)
     rack_blur = cv2.GaussianBlur(rack,(5,5),0)
     rack_thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
-                                       cv2.THRESH_BINARY,301,25)
+                                       cv2.THRESH_BINARY,301,TUBE_AREA_THRESH_CONSTANT)
     rack_thr = 255 - rack_thr
 
     # show_image_small('rack_thr', rack_thr)
@@ -224,7 +221,7 @@ if __name__ == '__main__':
     #tuples of (indices, decoded data)
     dataIndices = []
 
-    i = 0
+    matricesDecoded = 0
     #smallest and largest x-coordinate found
     maxX = -1*float('inf')
     minX = float('inf')
@@ -249,24 +246,26 @@ if __name__ == '__main__':
             if SHOW_IMAGES:
                 cv2.imshow('tube', tube)
 
-            data, matrix = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR, i)
+            data, matrix = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR)
+
+            tubesFound += 1
 
             if data:
-                i += 1
+                matricesDecoded += 1
             else:
                 #if this failed, just run on uncropped tube
                 data = decode(tube)
                 if data:
-                    i += 1
+                    matricesDecoded += 1
                 else:
                     #try again, but threshold tube
                     x, tube_thr = cv2.threshold(tube, MATRIX_THRESH_FACTOR * tube.max(), 255, cv2.THRESH_BINARY)
                     data = decode(tube_thr)
                     if data:
-                        i += 1
+                        matricesDecoded += 1
                     else:
                         print('zoinks')
-                        cv2.imwrite(f'images/badkek{i}.jpg', tube)
+                        cv2.imwrite(f'images/badkek{tubesFound}.jpg', tube)
                         # cv2.putText(img, 'no bueno', (x,y), cv2.FONT_HERSHEY_PLAIN, 5, (255,0,0), thickness=3)
 
             #add decoded data to coordinate-data dict
@@ -305,5 +304,6 @@ if __name__ == '__main__':
     dataIndices.sort(key = (lambda x: x[0][0]*1000 + x[0][1]))
     print(dataIndices)
 
-    print(i)
+    print(f'tubes found: {tubesFound}')
+    print(f'decoded: {matricesDecoded}')
 
