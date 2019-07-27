@@ -1,7 +1,6 @@
-from graphics import *
 import numpy as np
 from makeTestInput import writeInput
-from PIL import Image
+from PIL import Image, ImageDraw
 
 #tube statuses
 ABSENT = 0
@@ -10,6 +9,7 @@ TARGET = 2
 PICKED = 3
 
 class trayStatusViewer:
+
     #represents one tube - one square/circle displayed in the window
     class Tube:
         def __init__(self, x, y, edgeLength, win):
@@ -57,7 +57,10 @@ class trayStatusViewer:
 
         windowX = self.EDGE_LENGTH*(self.NUM_RACKS*(self.TUBES_ALONG_X+1)-1)
         windowY = self.EDGE_LENGTH*(self.TUBES_ALONG_Y+3)
-        self.win = GraphWin('tubes', windowX, windowY) # give title and dimensions
+        #image that represents the whole tray
+        self.win = Image.new(mode='RGB', size=(windowX,windowY), color=(255,255,255))
+        #object used to draw shapes on win
+        self.draw = ImageDraw.Draw(self.win)
 
         #initialize tray of ABSENT tubes
         #3d list to hold tube objects - rack, x-coordinate, y-coordinate
@@ -79,7 +82,7 @@ class trayStatusViewer:
             for row in range(self.TUBES_ALONG_Y):
                 x_coor = int(np.round(self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1)-0.5)))
                 y_coor = int(np.round(self.EDGE_LENGTH*(row + 1.5)))
-                Text(Point(x_coor, y_coor), str(TUBES_ALONG_Y-row)).draw(self.win)
+                self.draw.text((x_coor,y_coor), str(TUBES_ALONG_Y-row), fill=(0,0,0))
 
         #draw row indices above and below each tray
         alphabet = 'ABCDEFGH'
@@ -88,17 +91,16 @@ class trayStatusViewer:
         for rack in range(self.NUM_RACKS):
             for col in range(self.TUBES_ALONG_X):
                 x_coor = self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + col + 0.5)
-                Text(Point(x_coor, top_y_coor), alphabet[col]).draw(self.win)
+                self.draw.text((x_coor, top_y_coor), alphabet[col], fill=(0,0,0))
+                self.draw.text((x_coor, bottom_y_coor), alphabet[col], fill=(0,0,0))
 
-                Text(Point(x_coor, bottom_y_coor), alphabet[col]).draw(self.win)
 
         #draw tray numbers beneath trays
         y_coor = self.EDGE_LENGTH*(TUBES_ALONG_Y+2.3)
         for rack in range(self.NUM_RACKS):
             x_coor = self.EDGE_LENGTH*((self.TUBES_ALONG_X+1)*(rack + 0.5)-0.5)
             rackNum = Text(Point(x_coor, y_coor), rack+1)
-            rackNum.setSize(20)
-            rackNum.draw(self.win)
+            self.draw.text((x_coor, y_coor), rack+1, fill=(0,0,0))
 
         # self.win.getMouse()
 
@@ -115,7 +117,11 @@ class trayStatusViewer:
             for line in file.readlines():
                 row = list(map(lambda x: int(x)-1, line.split(',')))
                 #make sure all three are in bounds
-                if all([0 <= m and m < bound for m, bound in zip(row, [self.NUM_RACKS, self.TUBES_ALONG_X, self.TUBES_ALONG_Y])]):
+                if all([0 <= m and m < bound \
+                        for m, bound in \
+                        zip(row, [self.NUM_RACKS, \
+                                  self.TUBES_ALONG_X, \
+                                  self.TUBES_ALONG_Y])]):
                     rack, x, y = row
                     if self.tubes[rack][x][y].getStatus() != PRESENT:
                         self.tubes[rack][x][y].showAsPresent()
@@ -125,7 +131,11 @@ class trayStatusViewer:
             for line in file.readlines():
                 row = list(map(lambda x: int(x)-1, line.split(',')))
                 #make sure all three are in bounds
-                if all([0 <= m and m < bound for m, bound in zip(row, [self.NUM_RACKS, self.TUBES_ALONG_X, self.TUBES_ALONG_Y])]):
+                if all([0 <= m and m < bound \
+                        for m, bound in \
+                        zip(row, [self.NUM_RACKS, \
+                                  self.TUBES_ALONG_X, \
+                                  self.TUBES_ALONG_Y])]):
                     rack, x, y = row
                     #only set PRESENT tubes to TARGET
                     if self.tubes[rack][x][y].getStatus() == PRESENT:
@@ -135,7 +145,11 @@ class trayStatusViewer:
 
 
     def pickTube(self, rack, x, y):
-        if all([0 <= m and m < bound for m, bound in zip([rack, x, y], [self.NUM_RACKS, self.TUBES_ALONG_X, self.TUBES_ALONG_Y])]):
+        if all([0 <= m and m < bound \
+                for m, bound in zip([rack, x, y], \
+                                    [self.NUM_RACKS, \
+                                     self.TUBES_ALONG_X, \
+                                     self.TUBES_ALONG_Y])]):
             target = self.tubes[rack][x][y]
             if target.getStatus() == TARGET:
                 target.showAsPicked()
@@ -162,6 +176,7 @@ if __name__ == '__main__':
     writeInput(50, NUM_RACKS, TUBES_ALONG_X, TUBES_ALONG_Y, 'target_input.csv')
 
     viewer.newTray('present_input.csv', 'target_input.csv')
+    # viewer.win.close()
 
     target = input('Enter coordinates <rack>,<x>,<y>: ')
     while target and ',' in target:
@@ -172,5 +187,3 @@ if __name__ == '__main__':
     viewer.win.postscript(file='img.eps', colormode='color')
     img = Image.open('img.eps')
     img.save('tray.jpg', 'jpeg')
-
-
