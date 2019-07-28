@@ -1,6 +1,6 @@
 import numpy as np
 from makeTestInput import writeInput
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 #tube statuses
 ABSENT = 0
@@ -8,42 +8,61 @@ PRESENT = 1
 TARGET = 2
 PICKED = 3
 
-class trayStatusViewer:
+#font to use for index labels
+indexFont = ImageFont.truetype('COURIER.TTF', size=15)
+#bigger font to use for rack labels
+rackFont = ImageFont.truetype('COURIER.TTF', size=25)
 
+alphabet = 'ABCDEFGH'
+lowerAlphabet = 'abcdefgh'
+
+class trayStatusViewer:
     #represents one tube - one square/circle displayed in the window
     class Tube:
-        def __init__(self, x, y, edgeLength, win):
+
+        def __init__(self, x, y, edgeLength, draw):
             self.x = x
             self.y = y
             self.status = ABSENT
+            self.draw = draw
+            self.edgeLength = edgeLength
 
-            square = Rectangle(Point(x, y), Point(x + edgeLength, y + edgeLength))
-            square.setOutline('black')
-            square.setFill('white')
-            self.square = square
+            #draw empty rectangle and circle to represent tube
+            draw.rectangle([(x, y), \
+                            (x + edgeLength, y + edgeLength)], \
+                           fill=(255,255,255), \
+                           outline=(0,0,0))
+            draw.ellipse([(x + edgeLength/10, y + edgeLength/10), \
+                          (x + edgeLength*9/10, y + edgeLength*9/10)], \
+                           fill=(255,255,255), \
+                           outline=(0,0,0))
 
-            circle = Circle(Point(np.round(x + edgeLength/2), (np.round(y + edgeLength/2))), np.round(edgeLength*0.4))
-            self.circle = circle
-            circle.setOutline('black')
-            circle.setFill('white')
-
-            square.draw(win)
-            circle.draw(win)
+        #draw the circle representing the tube filled with given color
+        #and black outline
+        def __colorTube(self, color):
+            self.draw.ellipse([(self.x + self.edgeLength/10, self.y + self.edgeLength/10), \
+                               (self.x + self.edgeLength*9/10, self.y + self.edgeLength*9/10)], \
+                              fill=color, \
+                              outline=(0,0,0))
 
         def showAsAbsent(self):
-            self.circle.setFill('white')
+            #color tube white
+            self.__colorTube((255,255,255))
             self.status = ABSENT
 
         def showAsPresent(self):
-            self.circle.setFill('black')
+            #color tube black
+            self.__colorTube((0,0,0))
             self.status = PRESENT
 
         def showAsTarget(self):
-            self.circle.setFill('red')
+            #color tube red
+            self.__colorTube((255,0,0))
             self.status = TARGET
 
         def showAsPicked(self):
-            self.circle.setFill(color_rgb(52, 217, 90))
+            #color tube green
+            self.__colorTube((52, 217, 90))
             self.status = PICKED
 
         def getStatus(self):
@@ -72,35 +91,47 @@ class trayStatusViewer:
                 for y in range(self.TUBES_ALONG_Y):
                     x_coor = self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + x)
                     y_coor = self.EDGE_LENGTH*(y+1)
-                    y_list.append(self.Tube(x_coor, y_coor, self.EDGE_LENGTH, self.win))
+                    y_list.append(self.Tube(x_coor, y_coor, self.EDGE_LENGTH, self.draw))
                 x_list.append(y_list)
             tubes.append(x_list)
         self.tubes = tubes
 
         #draw column indices between each pair of trays
         for rack in range(1, self.NUM_RACKS):
+            x_coor = int(np.round(self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1)-0.85)))
+            single_digit_x_coor = x_coor + int(np.round(self.EDGE_LENGTH*0.18))
             for row in range(self.TUBES_ALONG_Y):
-                x_coor = int(np.round(self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1)-0.5)))
-                y_coor = int(np.round(self.EDGE_LENGTH*(row + 1.5)))
-                self.draw.text((x_coor,y_coor), str(TUBES_ALONG_Y-row), fill=(0,0,0))
+                #if row is a singe digit, shift the text a bit to the right
+                mod_x_coor = single_digit_x_coor if TUBES_ALONG_Y-row < 10 else x_coor
+                y_coor = int(np.round(self.EDGE_LENGTH*(row + 1.27)))
+                self.draw.text((mod_x_coor,y_coor),
+                               text = str(TUBES_ALONG_Y-row),
+                               font = indexFont,
+                               fill = (0,0,0))
 
-        #draw row indices above and below each tray
-        alphabet = 'ABCDEFGH'
-        top_y_coor = self.EDGE_LENGTH*(self.TUBES_ALONG_Y+1.5)
-        bottom_y_coor = self.EDGE_LENGTH*0.5
+        #draw row indices above and below each rack
+        bottom_y_coor = self.EDGE_LENGTH*(self.TUBES_ALONG_Y+1.2)
+        top_y_coor = self.EDGE_LENGTH*0.45
         for rack in range(self.NUM_RACKS):
             for col in range(self.TUBES_ALONG_X):
-                x_coor = self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + col + 0.5)
-                self.draw.text((x_coor, top_y_coor), alphabet[col], fill=(0,0,0))
-                self.draw.text((x_coor, bottom_y_coor), alphabet[col], fill=(0,0,0))
+                x_coor = self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + col + 0.32)
+                self.draw.text((x_coor, bottom_y_coor),
+                               text = alphabet[col],
+                               font = indexFont,
+                               fill=(0,0,0))
+                self.draw.text((x_coor, top_y_coor),
+                               text = alphabet[col],
+                               font = indexFont,
+                               fill=(0,0,0))
 
-
-        #draw tray numbers beneath trays
-        y_coor = self.EDGE_LENGTH*(TUBES_ALONG_Y+2.3)
+        #draw rack numbers beneath racks
+        y_coor = self.EDGE_LENGTH*(TUBES_ALONG_Y+2)
         for rack in range(self.NUM_RACKS):
-            x_coor = self.EDGE_LENGTH*((self.TUBES_ALONG_X+1)*(rack + 0.5)-0.5)
-            rackNum = Text(Point(x_coor, y_coor), rack+1)
-            self.draw.text((x_coor, y_coor), rack+1, fill=(0,0,0))
+            x_coor = self.EDGE_LENGTH*((self.TUBES_ALONG_X+1)*(rack + 0.5)-0.75)
+            self.draw.text((x_coor, y_coor),
+                           text = str(rack+1),
+                           font = rackFont,
+                           fill=(0,0,0))
 
         # self.win.getMouse()
 
@@ -145,12 +176,20 @@ class trayStatusViewer:
 
 
     def pickTube(self, rack, x, y):
+        if x in alphabet:
+            x_num = alphabet.index(x)
+        elif x in lowerAlphabet:
+            x_num = lowerAlphabet.index(x)
+        else:
+            print('Bad input')
+            return
+
         if all([0 <= m and m < bound \
-                for m, bound in zip([rack, x, y], \
+                for m, bound in zip([rack, x_num, y], \
                                     [self.NUM_RACKS, \
                                      self.TUBES_ALONG_X, \
                                      self.TUBES_ALONG_Y])]):
-            target = self.tubes[rack][x][y]
+            target = self.tubes[rack][x_num][y]
             if target.getStatus() == TARGET:
                 target.showAsPicked()
             elif target.getStatus() == ABSENT:
@@ -162,8 +201,15 @@ class trayStatusViewer:
         else:
             print("Tube out of bounds!")
 
+    #write the tube image to output file
+    def saveImage(self, filename):
+        self.win.save(filename, 'PNG')
+
+    def showImage(self):
+        self.win.show()
+
 if __name__ == '__main__':
-    NUM_RACKS = 6
+    NUM_RACKS = 5
     EDGE_LENGTH = 25 if NUM_RACKS == 6 else 30
     TUBES_ALONG_X = 8
     TUBES_ALONG_Y = 12
@@ -176,14 +222,13 @@ if __name__ == '__main__':
     writeInput(50, NUM_RACKS, TUBES_ALONG_X, TUBES_ALONG_Y, 'target_input.csv')
 
     viewer.newTray('present_input.csv', 'target_input.csv')
-    # viewer.win.close()
+    viewer.showImage()
 
     target = input('Enter coordinates <rack>,<x>,<y>: ')
     while target and ',' in target:
-        rack, x, y = map(lambda x: int(x)-1, target.split(','))
-        viewer.pickTube(rack, x, y)
+        rack, x, y = target.split(',')
+        viewer.pickTube(int(rack)-1, x, TUBES_ALONG_Y - int(y))
+        viewer.showImage()
         target = input('Enter coordinates <rack>,<x>,<y>: ')
 
-    viewer.win.postscript(file='img.eps', colormode='color')
-    img = Image.open('img.eps')
-    img.save('tray.jpg', 'jpeg')
+    viewer.saveImage('tray.png')
