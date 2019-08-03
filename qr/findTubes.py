@@ -5,9 +5,11 @@ import cv2
 import numpy as np
 from pylibdmtx.pylibdmtx import decode
 
-FILENAME = 'topkek.jpg'
+FILENAME = 'sidekek.jpg'
 
-SHOW_IMAGES = False
+SHOW_IMAGES = 0
+SHOW_RACK = 0
+PRINT_CONTOUR_SIZES = 0
 
 #max number of pixels of different between y coordinates for tubes to be considered in same row
 SAME_ROW_THRESHOLD = 70
@@ -20,7 +22,7 @@ NUM_COLS = 12
 RACK_THRESH_FACTOR = 0.75
 #for cropping tube area (tube+rims/shadows) from rack
 TUBE_AREA_THRESH_FACTOR = 0.26
-TUBE_AREA_THRESH_CONSTANT = 30
+TUBE_AREA_THRESH_CONSTANT = 20
 #for cropping just circular tube from tube area
 TUBE_THRESH_FACTOR = 0.75
 #for cropping data matrix from harris corner heatmap image
@@ -28,14 +30,14 @@ HARRIS_THRESH_FACTOR = 0.01
 #for removing surrounding numbers but keeping data matrix
 NUMBERS_THRESH_FACTOR = 0.35
 #for thresholding matrix after it's been cropped from tube
-MATRIX_THRESH_FACTOR = 0.4
+MATRIX_THRESH_FACTOR = 0.35
 
 #size of box used in harris corner algorithm
 HARRIS_BLOCK_SIZE = 6
 
 #typical edge lengths of contour bounding boxes of tube areas
-EDGE_LOWER_BOUND = 150
-EDGE_UPPER_BOUND = 210
+EDGE_LOWER_BOUND = 170
+EDGE_UPPER_BOUND = 270
 
 #approx pixel edge length of perfectly cropped matrix
 MATRIX_SIZE_LOWER_BOUND = 85
@@ -207,8 +209,9 @@ if __name__ == '__main__':
                                        cv2.THRESH_BINARY,301,TUBE_AREA_THRESH_CONSTANT)
     rack_thr = 255 - rack_thr
 
-    # show_image_small('rack_thr', rack_thr)
-    # exit(0)
+    if SHOW_RACK:
+        show_image_small('rack_thr', rack_thr)
+        exit(0)
 
     #get contours around tubes
     contours, hierarchy = cv2.findContours(rack_thr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -229,6 +232,9 @@ if __name__ == '__main__':
         #smallest non-rotated bounding rectangle
         rect = cv2.boundingRect(contour)
         x, y, w, h = rect
+
+        if PRINT_CONTOUR_SIZES:
+            print(w,h)
 
         #hopefully only the tube contours are this square and this big
         if all([EDGE_LOWER_BOUND < dim and EDGE_UPPER_BOUND > dim for dim in [w,h]]):

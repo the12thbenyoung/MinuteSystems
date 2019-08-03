@@ -12,7 +12,7 @@ def show_image_small(name, img):
 #for thresholding matrix after it's been cropped from tube
 MATRIX_THRESH_FACTOR = 0.3
 
-img = cv2.imread('images/badkek89.jpg')
+img = cv2.imread('images/badkek34.jpg')
 
 while MATRIX_THRESH_FACTOR < 0.45:
     x, tube_thr = cv2.threshold(img, MATRIX_THRESH_FACTOR * img.max(), 255, cv2.THRESH_BINARY)
