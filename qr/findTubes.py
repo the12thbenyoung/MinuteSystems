@@ -22,9 +22,9 @@ NUM_COLS = 12
 RACK_THRESH_FACTOR = 0.75
 #for cropping tube area (tube+rims/shadows) from rack
 TUBE_AREA_THRESH_FACTOR = 0.26
-TUBE_AREA_THRESH_CONSTANT = 20
+TUBE_AREA_THRESH_CONSTANT = 30
 #for cropping just circular tube from tube area
-TUBE_THRESH_FACTOR = 0.75
+TUBE_THRESH_FACTOR = 0.80
 #for cropping data matrix from harris corner heatmap image
 HARRIS_THRESH_FACTOR = 0.01
 #for removing surrounding numbers but keeping data matrix
@@ -63,7 +63,6 @@ MAX_DILATE_ITERS = 10
 
 #extra pixels added to edge of matrix crop
 MATRIX_EDGE_PIXELS = 4
-
 
 def show_image_small(name, img):
     cv2.imshow(name, cv2.resize(img, (int(img.shape[1]/5), int(img.shape[0]/5)), interpolation=cv2.INTER_AREA))
@@ -133,67 +132,108 @@ def crop_bounding_rect(img, contour, edge_pix):
     return img_crop
 
 def process_matrix(img, blockSize, threshFactor):
-    #hopefully remove numbers while keeping matrix
-    _, thr = cv2.threshold(img, NUMBERS_THRESH_FACTOR* img.max(), 255, cv2.THRESH_BINARY)
+    if img.size != 0:
+        #hopefully remove numbers while keeping matrix
+        _, thr = cv2.threshold(img, NUMBERS_THRESH_FACTOR* img.max(), 255, cv2.THRESH_BINARY)
 
-    #detect corners
-    opening = cv2.morphologyEx(thr, cv2.MORPH_OPEN, morphologyKernel)
-    harris = cv2.cornerHarris(opening, HARRIS_BLOCK_SIZE, 1, 0.00)
-  
-    contour = find_largest_contour(harris, threshFactor)
-    if contour.any():
-        contourArea = cv2.contourArea(cv2.convexHull(contour)),
+        #detect corners
+        opening = cv2.morphologyEx(thr, cv2.MORPH_OPEN, morphologyKernel)
+        harris = cv2.cornerHarris(opening, HARRIS_BLOCK_SIZE, 1, 0.00)
+      
+        contour = find_largest_contour(harris, threshFactor)
+        if contour.any():
+            contourArea = cv2.contourArea(cv2.convexHull(contour)),
 
-        #if threshFactor reached 0, we haven't found the matrix, so it likely isn't there
-        if threshFactor <= 0:
-            return None, img
+            #if threshFactor reached 0, we haven't found the matrix, so it likely isn't there
+            if threshFactor <= 0:
+                return None, img
 
-        #crop out matrix from tube
-        matrix = crop_smallest_rect(img, contour, MATRIX_EDGE_PIXELS)
-        height, width = matrix.shape[0], matrix.shape[1]
+            #crop out matrix from tube
+            matrix = crop_smallest_rect(img, contour, MATRIX_EDGE_PIXELS)
+            height, width = matrix.shape[0], matrix.shape[1]
 
-        ##keep raising threshold until matrix becomes sufficiently small, meaning
-        ##it's been cropped to just the matrix and not the surrounding numbers
-        #while any([dim > MATRIX_SIZE_UPPER_BOUND
-        #          for dim in [height, width]]) and threshFactor < 1:
-        #    threshFactor += THRESH_INCREMENT_UP
-        #    contour = find_largest_contour(harris, threshFactor)
-        #    contourArea = cv2.contourArea(cv2.convexHull(contour)),
-        #    matrix = crop_smallest_rect(img, contour)
-        #    height, width = matrix.shape[0], matrix.shape[1]
+            ##keep raising threshold until matrix becomes sufficiently small, meaning
+            ##it's been cropped to just the matrix and not the surrounding numbers
+            #while any([dim > MATRIX_SIZE_UPPER_BOUND
+            #          for dim in [height, width]]) and threshFactor < 1:
+            #    threshFactor += THRESH_INCREMENT_UP
+            #    contour = find_largest_contour(harris, threshFactor)
+            #    contourArea = cv2.contourArea(cv2.convexHull(contour)),
+            #    matrix = crop_smallest_rect(img, contour)
+            #    height, width = matrix.shape[0], matrix.shape[1]
 
-        #if matrix is too small, threshFactor was too high (didn't find whole matrix),
-        #so lower it and try again
-        iters = 0
-        while any([dim < MATRIX_SIZE_LOWER_BOUND
-                   for dim in [height, width]]) and iters < MAX_DILATE_ITERS:
-            harris = cv2.dilate(harris, dilationKernel, iterations=1)
-            contour = find_largest_contour(harris, threshFactor)
-            if contour.any():
-                contourArea = cv2.contourArea(cv2.convexHull(contour)),
-                matrix = crop_smallest_rect(img, contour, MATRIX_EDGE_PIXELS)
-                height, width = matrix.shape[0], matrix.shape[1]
-                iters += 1
+            #if matrix is too small, threshFactor was too high (didn't find whole matrix),
+            #so lower it and try again
+            iters = 0
+            while any([dim < MATRIX_SIZE_LOWER_BOUND
+                       for dim in [height, width]]) and iters < MAX_DILATE_ITERS:
+                harris = cv2.dilate(harris, dilationKernel, iterations=1)
+                contour = find_largest_contour(harris, threshFactor)
+                if contour.any():
+                    contourArea = cv2.contourArea(cv2.convexHull(contour)),
+                    matrix = crop_smallest_rect(img, contour, MATRIX_EDGE_PIXELS)
+                    height, width = matrix.shape[0], matrix.shape[1]
+                    iters += 1
+                else:
+                    break
+
+            # cv2.imshow('matrix', matrix)
+            # cv2.waitKey(0)
+
+            #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
+            #can use this to filter out some of them
+            if height/width < 1.5 and width/height < 1.5:
+                return decode(matrix), matrix
             else:
-                break
-
-        # cv2.imshow('matrix', matrix)
-        # cv2.waitKey(0)
-
-        #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
-        #can use this to filter out some of them
-        if height/width < 1.5 and width/height < 1.5:
-            return decode(matrix), matrix
+                print('zoinks scoob thats a bad aspect ratio')
+                return None, matrix
         else:
-            print('zoinks scoob thats a bad aspect ratio')
-            return None, matrix
+            return None, img
     else:
         return None, img
 
-if __name__ == '__main__':
-    tubesFound = 0
-    img = cv2.imread(FILENAME)
+def processTube(tube, tubesFound):
+    data, matrix = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR)
 
+    if not data:
+        #if this failed, just run on uncropped tube
+        data = decode(tube)
+        if not data:
+            #try again, but threshold tube
+            x, tube_thr = cv2.threshold(tube, MATRIX_THRESH_FACTOR * tube.max(), 255, cv2.THRESH_BINARY)
+            data = decode(tube_thr)
+            #finally, if it really couldn't find it
+            if not data:
+                print('zoinks')
+                cv2.imwrite(f'images/badkek{tubesFound}.jpg', tube)
+                # cv2.putText(img, 'no bueno', (x,y), cv2.FONT_HERSHEY_PLAIN, 5, (255,0,0), thickness=3)
+
+    return data
+
+#take dimensions (x,y,w,h) of rectangle around tube and its shadow and crop to an
+#image containing a tighter rectangle around just the tube
+def cropAreaToTube(dims, rack):
+    x,y,w,h = dims['x'], dims['y'], dims['w'], dims['h']
+    #crop to bounding rect around contour
+    tubeArea = rack[y:y+h, x:x+w]
+
+    #crop again to just tube, trying to cut out surrounding shadow
+    tube_inv = 255 - tubeArea
+    tubeContour = find_largest_contour(tube_inv, TUBE_THRESH_FACTOR)
+    if tubeContour.any():
+        tube = crop_bounding_rect(tubeArea, tubeContour, 5)
+    else:
+        return np.array([])
+    
+    if SHOW_IMAGES:
+        cv2.imshow('tube', tube)
+
+    return tube
+
+def processRack(filename):
+    tubesFound, matricesDecoded = 0,0
+
+    img = cv2.imread(filename)
     #convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -224,55 +264,34 @@ if __name__ == '__main__':
     #tuples of (indices, decoded data)
     dataIndices = []
 
-    matricesDecoded = 0
     #smallest and largest x-coordinate found
     maxX = -1*float('inf')
     minX = float('inf')
-    for contour in contours:
-        #smallest non-rotated bounding rectangle
-        rect = cv2.boundingRect(contour)
-        x, y, w, h = rect
 
-        if PRINT_CONTOUR_SIZES:
-            print(w,h)
+    #smallest non-rotated bounding rectangle for each contour
+    #and filter our those which are too small
+    boundingRectDims = filter(lambda c: all([EDGE_LOWER_BOUND < dim and \
+                                             EDGE_UPPER_BOUND > dim \
+                                             for dim in [c['w'],c['h']]]),
+                              map(lambda c: dict(zip(('x','y','w','h'), \
+                                                     cv2.boundingRect(c))), \
+                                  contours))
 
-        #hopefully only the tube contours are this square and this big
-        if all([EDGE_LOWER_BOUND < dim and EDGE_UPPER_BOUND > dim for dim in [w,h]]):
-            #crop to bounding rect around contour
-            tubeArea = rack[y:y+h, x:x+w]
+    #make a list of cropped tube images
+    tubeImages = []
+    for dims in boundingRectDims:
+        tubeImg = cropAreaToTube(dims, rack)
+        if tubeImg.size != 0:
+            tubeImages.append(tubeImg)
+    tubesFound = len(tubeImages)
 
-            #crop again to just tube, trying to cut out surrounding shadow
-            tube_inv = 255 - tubeArea
-            tubeContour = find_largest_contour(tube_inv, TUBE_THRESH_FACTOR)
-            if tubeContour.any():
-                tube = crop_bounding_rect(tubeArea, tubeContour, 5)
-            else:
-                continue
-            
-            if SHOW_IMAGES:
-                cv2.imshow('tube', tube)
+    #create a pool of processes to decode images in parallel
+    p = Pool(4)
+    codes = p.map(processTube, tubeImages)
 
-            data, matrix = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR)
-
-            tubesFound += 1
 
             if data:
                 matricesDecoded += 1
-            else:
-                #if this failed, just run on uncropped tube
-                data = decode(tube)
-                if data:
-                    matricesDecoded += 1
-                else:
-                    #try again, but threshold tube
-                    x, tube_thr = cv2.threshold(tube, MATRIX_THRESH_FACTOR * tube.max(), 255, cv2.THRESH_BINARY)
-                    data = decode(tube_thr)
-                    if data:
-                        matricesDecoded += 1
-                    else:
-                        print('zoinks')
-                        cv2.imwrite(f'images/badkek{tubesFound}.jpg', tube)
-                        # cv2.putText(img, 'no bueno', (x,y), cv2.FONT_HERSHEY_PLAIN, 5, (255,0,0), thickness=3)
 
             #add decoded data to coordinate-data dict
             coorToData[hash((x,y))] = data[0].data if data else 0
@@ -308,8 +327,14 @@ if __name__ == '__main__':
 
     #sort dataIndices by x coordinate, then y
     dataIndices.sort(key = (lambda x: x[0][0]*1000 + x[0][1]))
-    print(dataIndices)
 
+    return(dataIndices, tubesFound, matricesDecoded)
+
+if __name__ == '__main__':
+    dataIndices, tubesFound, matricesDecoded = processRack(FILENAME)
+    print(dataIndices)
     print(f'tubes found: {tubesFound}')
     print(f'decoded: {matricesDecoded}')
+
+
 
