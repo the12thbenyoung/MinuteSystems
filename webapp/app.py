@@ -2,12 +2,29 @@ from flask import Flask, flash, render_template, request, redirect, send_from_di
 from werkzeug.utils import secure_filename
 import time
 from adafruit_motorkit import MotorKit
-from gpiozero import OutputDevice
-from time import sleep
+from solenoids.solenoid import Solenoid
+from motors.motor import Motor
+import pandas as pd
+from prod.trayStatusViewer import trayStatusViewer
 
-solenoid4 = OutputDevice(17)
+solenoid4 = Solenoid(17)
 
-kit = MotorKit()
+#motor = Motor()
+
+
+TUBES_ALONG_X = 8
+TUBES_ALONG_Y = 12
+
+inputFile = '/home/pi/MinuteSystems/webapp/test.csv'
+inputDf = pd.read_csv(inputFile, dtype={'SampleBarcode': str})
+#default to 5 racks unless there are 6 listed in file
+numRacks = 6 if 6 in inputDf['RackPositionInTray'] else 5
+edgeLength = 25 if numRacks == 6 else 30
+
+#Maintains image showing the tubes in the tray which are present, 
+#have already been picked, and still have to be picked
+viewer = trayStatusViewer(edgeLength, numRacks, TUBES_ALONG_X, TUBES_ALONG_Y)
+
 
 UPLOAD_FOLDER = '/home/pi/MinuteSystems/webapp/test.csv'
 ALLOWED_EXTENSIONS = {'txt', 'csv'}
@@ -39,6 +56,15 @@ def get_csv_file():
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         file.save('/home/pi/MinuteSystems/webapp/test.csv')
+
+        #columns relevant to the viewer
+        viewerInput = inputDf[['RackPositionInTray', 'WellID', 'Pick']]
+
+        #initialize viewer with new tray
+        viewer.newTray(viewerInput)
+        #viewer.showImage()
+
+        viewer.saveImage("/home/pi/MinuteSystems/webapp/static/kek.jpg")
     return render_template('file_uploaded.html')
 
 @app.route('/download_it')
@@ -48,25 +74,8 @@ def download_it():
 
 @app.route('/run_tray')
 def run_tray():
-    print("Runing Tray")
-    f = open("test.csv", "r")
-    if f.mode == 'r':
-        contents = f.readlines()
-    for i in contents:
-        i = i.strip()
-        print("this is the line" + i + "kek")
-        letter = ord(i[:1])+100
-        number = int(i[2:])
-        print(letter)
-        for j in range(letter):
-            kit.stepper1.onestep()
-        if number == 4:
-            solenoid4.on()
-            print("four")
-            sleep(5)
-            solenoid4.off()
-        elif number == 7:
-            print("seven")
+    viewer.pickTube(1, 'H', 9)
+        
     return render_template('pick_tubes.html')
 
 @app.route('/check_tray')

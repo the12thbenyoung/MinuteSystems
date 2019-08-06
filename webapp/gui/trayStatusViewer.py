@@ -1,5 +1,5 @@
 import numpy as np
-from makeTestInput import writeInput
+from gui.makeTestInput import writeInput
 from PIL import Image, ImageDraw, ImageFont
 
 #tube statuses
