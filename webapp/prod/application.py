@@ -22,6 +22,6 @@ viewerInput = inputDf[['RackPositionInTray', 'WellID', 'Pick']]
 viewer.newTray(viewerInput)
 #viewer.showImage()
 
-viewer.saveImage("kek.jpg")
+viewer.saveImage("../static/traydisplay.jpg")
 
 print("kek")
