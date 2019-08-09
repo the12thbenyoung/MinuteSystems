@@ -1,4 +1,5 @@
 from flask import Flask, flash, render_template, request, redirect, send_from_directory, url_for, send_file
+from flask.ext.session import Session
 from werkzeug.utils import secure_filename
 import time
 from adafruit_motorkit import MotorKit
@@ -10,6 +11,8 @@ from numpy import unique
 
 
 #CONSTANTS SECTION STARTS
+
+SESSION_TYPE = 'redis'
 
 TUBES_ALONG_X = 8
 TUBES_ALONG_Y = 12
@@ -25,6 +28,9 @@ trayDataList = None
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+app.config.from_object(__name__)
+Session(app)
 
 def nextTray(viewer, trayId, trayData):
     
