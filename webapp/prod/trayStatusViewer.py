@@ -147,7 +147,7 @@ class trayStatusViewer:
 
         for _, row in locationData.iterrows():
             (x,y) = int(row['TubeColumn']), int(row['TubeRow'])
-            rack = int(row['RackPositionInTray']) - 1
+            rack = int(row['RackPositionInTray'])
             toPick = row['Pick'] 
             #make sure all are in bounds
             #and pick status isn't NaN - if it is tube should stay absent
@@ -163,20 +163,12 @@ class trayStatusViewer:
                     self.tubes[rack][x][y].showAsPresent()
 
     def pickTube(self, rack, x, y):
-        if x in alphabet:
-            x_num = alphabet.index(x)
-        elif x in lowerAlphabet:
-            x_num = lowerAlphabet.index(x)
-        else:
-            print('Bad input')
-            return
-
         if all([0 <= m and m < bound \
-                for m, bound in zip([rack, x_num, y], \
+                for m, bound in zip([rack, x, y], \
                                     [self.NUM_RACKS, \
                                      self.TUBES_ALONG_X, \
                                      self.TUBES_ALONG_Y])]):
-            target = self.tubes[rack][x_num][y]
+            target = self.tubes[rack][x][y]
             if target.getStatus() == TARGET:
                 target.showAsPicked()
             elif target.getStatus() == ABSENT:

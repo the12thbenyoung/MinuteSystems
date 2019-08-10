@@ -79,6 +79,9 @@ def get_csv_file():
         inputDataframe = pd.read_csv(inputFile, dtype={'SampleBarcode': str})
         #remove rows where WellID is NaN
         inputDataframe.dropna(subset=['WellID'], axis='rows', inplace=True)
+        #subtract 1 from each RackPositionInTray
+        inputDataframe['RackPositionInTray'] = inputDataframe['RackPositionInTray'] \
+                                                .apply(lambda x: x - 1)
         #split tubePositionsList into columns (first letter) and rows (second two numbers)
         tubePositionsList = [[convertRow(row[0]),int(row[1:])-1] for row in inputDataframe['WellID']]
         tubePositionsDf = pd.DataFrame(tubePositionsList, columns = ['TubeColumn', 'TubeRow'])
@@ -91,7 +94,7 @@ def get_csv_file():
         #data frames holding the rows associated with each tray
         trayDataframes = [inputDataframe[inputDataframe['TrayID'] == trayId] for trayId in trayIds]
         #holds number of racks in each tray (5 or 6)
-        numRacksList = [(6 if 6 in tray_df['RackPositionInTray'] else 5) for tray_df in trayDataframes]
+        numRacksList = [(6 if 5 in tray_df['RackPositionInTray'] else 5) for tray_df in trayDataframes]
 
         trayDataZip = list(zip(trayIds, trayDataframes, numRacksList))
         session['trayDataList'] = trayDataZip
@@ -117,7 +120,12 @@ def run_tray():
     trayDataList = session.get('trayDataList', None)
     if trayDataList:
         #run the first tray and remove it
-        tray, trayData, _ = trayDataList.pop(0)
+        tray, trayData, numRacks = trayDataList.pop(0)
+
+        edgeLength = 25 if numRacks == 6 else 30
+        viewer = trayStatusViewer(edgeLength, numRacks, TUBES_ALONG_X, TUBES_ALONG_Y)
+        viewer.newTray(trayData)
+
         trayDataPick = trayData[trayData['Pick'] == 1]
         racks = unique(trayDataPick['RackPositionInTray'])
         racks.sort()
@@ -131,6 +139,10 @@ def run_tray():
                 for row in colData['TubeRow']:
                     print(tray, rackId, col, row)
                     #activate soleniod
+                    viewer.pickTube(rackId, col, row)
+
+        #save image of tray in 'static/images/' to to be shown in file_uploaded.html
+        viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
         
     return render_template('next_tray.html')
 
