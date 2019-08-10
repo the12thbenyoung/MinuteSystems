@@ -9,7 +9,7 @@ from multiprocessing import Pool, Process, Queue
 FILENAME = 'chungis.jpg'
 
 SHOW_IMAGES = 0
-SHOW_RACK = 1
+SHOW_RACK = 0
 PRINT_CONTOUR_SIZES = 0
 
 #max number of pixels of different between y coordinates for tubes to be considered in same row
@@ -37,8 +37,10 @@ MATRIX_THRESH_FACTOR = 0.35
 HARRIS_BLOCK_SIZE = 6
 
 #typical edge lengths of contour bounding boxes of tube areas
-EDGE_LOWER_BOUND = 170
-EDGE_UPPER_BOUND = 270
+TUBE_HEIGHT_LOWER_BOUND = 150
+TUBE_HEIGHT_UPPER_BOUND = 250
+TUBE_WIDTH_LOWER_BOUND = 150
+TUBE_WIDTH_UPPER_BOUND = 500
 
 #approx pixel edge length of perfectly cropped matrix
 MATRIX_SIZE_LOWER_BOUND = 95
@@ -72,8 +74,9 @@ MATRIX_EDGE_PIXELS = 5
 
 badcount = 0
 
-def show_image_small(name, img):
-    cv2.imshow(name, cv2.resize(img, (int(img.shape[1]/5), int(img.shape[0]/5)), interpolation=cv2.INTER_AREA))
+def show_image_small(*args):
+    for (name, img) in args:
+        cv2.imshow(name, cv2.resize(img, (int(img.shape[1]/5), int(img.shape[0]/5)), interpolation=cv2.INTER_AREA))
     cv2.waitKey(0)
 
 def outputData(filename, dataIndices):
@@ -203,9 +206,6 @@ def processMatrix(img, blockSize, threshFactor):
             matrix_blur = cv2.GaussianBlur(matrix, (5,5), 0)
             _, matrix_thr = cv2.threshold(matrix_blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             decode2 = decode(matrix_thr)
-            cv2.imshow('matrix', matrix)
-            cv2.imshow('matrix_thr', matrix_thr)
-            cv2.waitKey(0)
 
             if decode1 and not decode2:
                 print('!!!!!!!!!!!!!!!!!!BAD!!!!!!!!!!!!!!!!!!!!')
@@ -274,17 +274,18 @@ def processRack(filename):
     # x, rack_thr = cv2.threshold(rack, TUBE_AREA_THRESH_FACTOR * rack.max(), 255, cv2.THRESH_BINARY)
     rack_blur = cv2.GaussianBlur(rack,(5,5),0)
     rack_thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
-                                       cv2.THRESH_BINARY,301,TUBE_AREA_THRESH_CONSTANT)
-    rack_thr = 255 - rack_thr
+                                       cv2.THRESH_BINARY_INV,301,TUBE_AREA_THRESH_CONSTANT)
     #erode image to try to get rid of white bridges between tubes and gaps on side of rack
-    rack_erode = cv2.erode(rack_thr, erosionKernel, iterations=1)
+    # rack_erode = cv2.erode(rack_thr, erosionKernel, iterations=1)
+    #open to remove noise and give smaller number of contours
+    rack_opening = cv2.morphologyEx(rack_thr, cv2.MORPH_OPEN, morphologyKernel, iterations=5)
 
     if SHOW_RACK:
-        show_image_small('rack_erode', rack_erode)
+        show_image_small(['rack_opening', rack_opening])
         exit(0)
 
     #get contours around tubes
-    contours, hierarchy = cv2.findContours(rack_thr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv2.findContours(rack_opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     #each set holds a group of points with similar y-coordinate - corresponding to one row in the rack
     rowLists = []
@@ -298,11 +299,14 @@ def processRack(filename):
     maxX = -1*float('inf')
     minX = float('inf')
 
+    for c in contours:
+        print(cv2.boundingRect(c))
     #smallest non-rotated bounding rectangle for each contour
     #and filter our those which are too small
-    boundingRectDims = filter(lambda c: all([EDGE_LOWER_BOUND < dim and \
-                                             EDGE_UPPER_BOUND > dim \
-                                             for dim in [c['w'],c['h']]]),
+    boundingRectDims = filter(lambda c: c['w'] > TUBE_WIDTH_LOWER_BOUND and \
+                                        c['w'] < TUBE_WIDTH_UPPER_BOUND and \
+                                        c['h'] > TUBE_HEIGHT_LOWER_BOUND and\
+                                        c['h'] < TUBE_HEIGHT_UPPER_BOUND, \
                               map(lambda c: dict(zip(('x','y','w','h'), \
                                                      cv2.boundingRect(c))), \
                                   contours))
@@ -367,7 +371,7 @@ def processRack(filename):
 
 if __name__ == '__main__':
     dataIndices, tubesFound, matricesDecoded = processRack(FILENAME)
-    print(dataIndices)
+    # print(dataIndices)
     print(f'tubes found: {tubesFound}')
     print(f'decoded: {matricesDecoded}')
 
