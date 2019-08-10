@@ -22,4 +22,7 @@ while (rack != 9):
             motor.forward(step)
     elif (rack<6):
         tube = int(input("Input a tube: "))
-        motor.moveToTube(rack, tube)
+        if (tube==0):
+            motor.moveToRack(rack)
+        else:
+            motor.moveToTube(rack, tube)
