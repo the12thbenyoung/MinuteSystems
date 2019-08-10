@@ -190,7 +190,7 @@ class trayStatusViewer:
 
     #write the tube image to output file
     def saveImage(self, filename):
-        self.win.save(filename, 'PNG')
+        self.win.save(filename, 'JPEG')
 
     def showImage(self):
         self.win.show()

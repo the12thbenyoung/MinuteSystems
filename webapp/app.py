@@ -23,10 +23,6 @@ ALLOWED_EXTENSIONS = {'txt', 'csv'}
 
 #CONSTANTS SECTION ENDS
 
-#I know this is very bad but we're only going to have one user at a time
-#and I hate web development and we're running out of time
-# viewer = None
-
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -67,7 +63,6 @@ def allowed_file(filename):
 
 @app.route('/get_csv_file', methods=['GET', 'POST'])
 def get_csv_file():
-    # global viewer
     if 'file' not in request.files:
         flash('No file part')
         return redirect(request.url)
@@ -92,22 +87,24 @@ def get_csv_file():
         inputDataframe = inputDataframe.drop(columns=['WellID'])
         inputDataframe = pd.concat([inputDataframe, tubePositionsDf], axis=1)
 
-        trayIds = unique(inputDataframe['TrayID'])
-        session['trayDataList'] = [(trayId, inputDataframe[inputDataframe['TrayID'] == trayId]) for trayId in trayIds]
+        trayIds = list(unique(inputDataframe['TrayID']))
+        #data frames holding the rows associated with each tray
+        trayDataframes = [inputDataframe[inputDataframe['TrayID'] == trayId] for trayId in trayIds]
+        #holds number of racks in each tray (5 or 6)
+        numRacksList = [(6 if 6 in tray_df['RackPositionInTray'] else 5) for tray_df in trayDataframes]
+
+        trayDataZip = list(zip(trayIds, trayDataframes, numRacksList))
+        session['trayDataList'] = trayDataZip
         
-        #default to 5 racks unless there are 6 listed in file
-        numRacks = 6 if 6 in inputDataframe['RackPositionInTray'] else 5
-        edgeLength = 25 if numRacks == 6 else 30
+        for i, (trayId, trayDataframe, numRacks) in enumerate(trayDataZip):
+            #Maintains image showing the tubes in the tray which are present, 
+            #have already been picked, and still have to be picked
+            edgeLength = 25 if numRacks == 6 else 30
+            viewer = trayStatusViewer(edgeLength, numRacks, TUBES_ALONG_X, TUBES_ALONG_Y)
+            viewer.newTray(trayDataframe[trayDataframe['TrayID'] == trayId])
+            #save image of tray in 'static/images/' to to be shown in file_uploaded.html
+            viewer.saveImage(os.path.join(WORKING_DIRECTORY, f'static/images/traydisplay{i}.jpg'))
 
-        #Maintains image showing the tubes in the tray which are present, 
-        #have already been picked, and still have to be picked
-        viewer = trayStatusViewer(edgeLength, numRacks, TUBES_ALONG_X, TUBES_ALONG_Y)
-
-        viewer.newTray(inputDataframe[inputDataframe['TrayID'] == int(trayIds[0])])
-
-        #viewer.showImage()
-
-        viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
     return render_template('file_uploaded.html')
 
 @app.route('/download_it')
@@ -120,7 +117,7 @@ def run_tray():
     trayDataList = session.get('trayDataList', None)
     if trayDataList:
         #run the first tray and remove it
-        tray, trayData = trayDataList.pop(0)
+        tray, trayData, _ = trayDataList.pop(0)
         trayDataPick = trayData[trayData['Pick'] == 1]
         racks = unique(trayDataPick['RackPositionInTray'])
         racks.sort()
@@ -135,11 +132,16 @@ def run_tray():
                     print(tray, rackId, col, row)
                     #activate soleniod
         
-    return render_template('pick_tubes.html')
+    return render_template('next_tray.html')
 
 @app.route('/check_tray')
 def check_tray():
     print("Checking Tray")
+    return render_template('pick_tubes.html')
+
+@app.route('/next_tray')
+def next_tray():
+    print("Next Tray")
     return render_template('pick_tubes.html')
 
 if __name__ == '__main__':
