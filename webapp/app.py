@@ -2,9 +2,9 @@ from flask import Flask, flash, render_template, request, redirect, send_from_di
 from flask_session import Session
 from werkzeug.utils import secure_filename
 import time
-from adafruit_motorkit import MotorKit
-from solenoids.solenoid import Solenoid
-from motors.motor import Motor
+# from adafruit_motorkit import MotorKit
+# from solenoids.solenoid import Solenoid
+# from motors.motor import Motor
 import pandas as pd
 from prod.trayStatusViewer import trayStatusViewer
 from numpy import unique
@@ -12,7 +12,6 @@ import os
 
 
 #CONSTANTS SECTION STARTS
-
 SESSION_TYPE = 'redis'
 
 TUBES_ALONG_X = 8
@@ -23,6 +22,10 @@ UPLOAD_FOLDER = os.path.join(WORKING_DIRECTORY, 'prod')
 ALLOWED_EXTENSIONS = {'txt', 'csv'}
 
 #CONSTANTS SECTION ENDS
+
+#I know this is very bad but we're only going to have one user at a time
+#and I hate web development and we're running out of time
+# viewer = None
 
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
@@ -64,6 +67,7 @@ def allowed_file(filename):
 
 @app.route('/get_csv_file', methods=['GET', 'POST'])
 def get_csv_file():
+    # global viewer
     if 'file' not in request.files:
         flash('No file part')
         return redirect(request.url)
@@ -78,6 +82,8 @@ def get_csv_file():
         #Bens stuff
         inputFile = os.path.join(UPLOAD_FOLDER, 'user_upload.csv')
         inputDataframe = pd.read_csv(inputFile, dtype={'SampleBarcode': str})
+        #remove rows where WellID is NaN
+        inputDataframe.dropna(subset=['WellID'], axis='rows', inplace=True)
         #split tubePositionsList into columns (first letter) and rows (second two numbers)
         tubePositionsList = [[convertRow(row[0]),int(row[1:])-1] for row in inputDataframe['WellID']]
         tubePositionsDf = pd.DataFrame(tubePositionsList, columns = ['TubeColumn', 'TubeRow'])
@@ -85,7 +91,6 @@ def get_csv_file():
         #remove old position column from original dataframe and append new columns
         inputDataframe = inputDataframe.drop(columns=['WellID'])
         inputDataframe = pd.concat([inputDataframe, tubePositionsDf], axis=1)
-        inputDataframe.to_csv('test.csv')
 
         trayIds = unique(inputDataframe['TrayID'])
         session['trayDataList'] = [(trayId, inputDataframe[inputDataframe['TrayID'] == trayId]) for trayId in trayIds]
@@ -117,10 +122,18 @@ def run_tray():
         #run the first tray and remove it
         tray, trayData = trayDataList.pop(0)
         trayDataPick = trayData[trayData['Pick'] == 1]
-        racks = unique(trayDataPick['rackID'])
-        for rack in racks:
-            pass
-            
+        racks = unique(trayDataPick['RackPositionInTray'])
+        racks.sort()
+        for rackId in racks:
+            rackData = trayDataPick[trayDataPick['RackPositionInTray'] == rackId]
+            columns = unique(rackData['TubeColumn'])
+            columns.sort()
+            for col in columns:
+                #move to rack,column
+                colData = rackData[rackData['TubeColumn'] == col]
+                for row in colData['TubeRow']:
+                    print(tray, rackId, col, row)
+                    #activate soleniod
         
     return render_template('pick_tubes.html')
 
