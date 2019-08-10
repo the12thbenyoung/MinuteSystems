@@ -135,10 +135,7 @@ class trayStatusViewer:
                            font = rackFont,
                            fill=(0,0,0))
 
-    #convert 'B08' style input from file to (x,y) index tuple - (1,7)
-    @staticmethod
-    def convertWellId(wellId):
-        return (alphabet.index(wellId[0]), int(wellId[1:]) - 1)
+    
 
     #determine which tubes start as ABSENT, PRESENT, or TARGET and color accordingly
     def newTray(self, locationData):
@@ -149,8 +146,8 @@ class trayStatusViewer:
                     tube.showAsAbsent()
 
         for _, row in locationData.iterrows():
-            (x,y) = self.convertWellId(row['WellID'])
-            rack = row['RackPositionInTray'] - 1
+            (x,y) = int(row['TubeColumn']), int(row['TubeRow'])
+            rack = int(row['RackPositionInTray']) - 1
             toPick = row['Pick'] 
             #make sure all are in bounds
             #and pick status isn't NaN - if it is tube should stay absent

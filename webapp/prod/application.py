@@ -20,4 +20,8 @@ viewerInput = inputDf[['RackPositionInTray', 'WellID', 'Pick']]
 
 #initialize viewer with new tray
 viewer.newTray(viewerInput)
-viewer.showImage()
+#viewer.showImage()
+
+viewer.saveImage("../static/traydisplay.jpg")
+
+print("kek")
