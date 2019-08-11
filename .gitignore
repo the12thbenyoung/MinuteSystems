@@ -1,0 +1,10 @@
+#ignore packages
+env/
+#images
+*.jpg
+*.jpeg
+*.png
+#swap files
+*.swp
+*.swo
+__pycache__
