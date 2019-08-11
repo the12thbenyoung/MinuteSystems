@@ -83,20 +83,24 @@ def process_matrix(img, blockSize, threshFactor):
                 matrix_blur = cv2.GaussianBlur(matrix, (5,5), 0)
                 _, matrix_thr = cv2.threshold(matrix_blur, 0, 255, \
                                               cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                decode2 = decode(matrix_thr)
-            else:
-                decode1 = decode(matrix)
+                decoded_matrix = decode(matrix_thr)
 
-            decode2 = decode(matrix_thr)
+                #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ALERT TAKE THIS OUT ALERT$$$$$$$$$$$$$$$$$$$$$$$
+                decoded_matrix1 = decode(matrix)
+                #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ALERT TAKE THIS OUT ALERT$$$$$$$$$$$$$$$$$$$$$$$
+
+                if decoded_matrix1 and not decoded_matrix:
+                    print('!!!!!!!!!!!!!!!!!!BAD!!!!!!!!!!!!!!!!!!!!')
+                if decoded_matrix and not decoded_matrix1:
+                    print('!!!!!!!!!!!!!!!!!!GOOD!!!!!!!!!!!!!!!!!!!!')
+            else:
+                decoded_matrix = decode(matrix)
+
             # cv2.imshow('matrix', matrix)
             # cv2.imshow('matrix_thr', matrix_thr)
             # cv2.waitKey(0)
 
-            if decode1 and not decode2:
-                print('!!!!!!!!!!!!!!!!!!BAD!!!!!!!!!!!!!!!!!!!!')
-            if decode2 and not decode1:
-                print('!!!!!!!!!!!!!!!!!!GOOD!!!!!!!!!!!!!!!!!!!!')
-            return decode(matrix_thr), matrix_thr
+            return decoded_matrix, matrix_thr
         else:
             print('zoinks scoob thats a bad aspect ratio')
             return None, matrix

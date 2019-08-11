@@ -13,9 +13,9 @@ from multiprocessing import Pool, Process, Queue
 
 FILENAME = 'shpongus.jpg'
 
-SHOW_IMAGES = 1
+SHOW_IMAGES = 0
 SHOW_RACK = 0
-PRINT_CONTOUR_SIZES = 1
+PRINT_CONTOUR_SIZES = 0
 
 #max number of pixels of different between y coordinates for tubes to be considered in same row
 SAME_ROW_THRESHOLD = 70
@@ -82,7 +82,7 @@ def show_image_small(*args):
         cv2.imshow(name, cv2.resize(img, (int(img.shape[1]/5), int(img.shape[0]/5)), interpolation=cv2.INTER_AREA))
     cv2.waitKey(0)
 
-def outputData(filename, dataIndices):
+def output_data(filename, dataIndices):
     with open(filename, 'w') as file:
         letters = 'ABCDEFGH'
         # file.write('row,col,value\n')
@@ -142,14 +142,14 @@ def crop_bounding_rect(img, contour, edge_pix):
     return img_crop
 
 
-def crop_to_harris(img, blockSize, numbersThreshFactor, harris = np.array([])):
+def crop_to_harris(img, blockSize, numbers_thresh_factor, harris = np.array([])):
     #we only pass in harris if matrix is too small, in which case we dilate it
     if harris.size != 0:
         harris = cv2.dilate(harris, dilationKernel, iterations=1)
-    #otherwise matrix is too big, so find it again with larger numbersThreshFactor
+    #otherwise matrix is too big, so find it again with larger numbers_thresh_factor
     else:
         #hopefully remove numbers while keeping matrix
-        _, thr = cv2.threshold(img, numbersThreshFactor* img.max(), 255, cv2.THRESH_BINARY)
+        _, thr = cv2.threshold(img, numbers_thresh_factor* img.max(), 255, cv2.THRESH_BINARY)
         # cv2.imshow('thr', thr)
 
         #detect corners
@@ -173,7 +173,7 @@ def crop_to_harris(img, blockSize, numbersThreshFactor, harris = np.array([])):
 
 def process_matrix(img, blockSize, threshFactor):
     if img.size != 0:
-        numbersThreshFactor = NUMBERS_THRESH_FACTOR
+        numbers_thresh_factor = NUMBERS_THRESH_FACTOR
         matrix, harris, height,  width = crop_to_harris(img, blockSize, NUMBERS_THRESH_FACTOR)
         if SHOW_IMAGES:
             cv2.imshow('crop', matrix)
@@ -190,11 +190,11 @@ def process_matrix(img, blockSize, threshFactor):
                     for dim in [height, width] \
                     for bound in [MATRIX_SIZE_UPPER_BOUND, MATRIX_SIZE_LOWER_BOUND]]) \
               and iters < MAX_DILATE_ITERS:
-            numbersThreshFactor += NUMBERS_THRESH_INCREMENT
+            numbers_thresh_factor += NUMBERS_THRESH_INCREMENT
             # print('too big', height, width)
             matrix, harris, height, width = crop_to_harris(img, \
                                                          blockSize, \
-                                                         numbersThreshFactor)
+                                                         numbers_thresh_factor)
             iters += 1
 
         #if matrix is too small, there were likely gaps in the harris threshold that split
@@ -266,7 +266,7 @@ def process_tube(tube):
 
 #take dimensions (x,y,w,h) of rectangle around tube and its shadow and crop to an
 #image containing a tighter rectangle around just the tube
-def cropAreaToTube(dims, rack):
+def crop_area_to_tube(dims, rack):
     x,y,w,h = dims['x'], dims['y'], dims['w'], dims['h']
     #crop to bounding rect around contour
     tubeArea = rack[y:y+h, x:x+w]
@@ -284,7 +284,7 @@ def cropAreaToTube(dims, rack):
 
     return tube
 
-def processRack(filename):
+def process_rack(filename, data_queue = None):
     badcount = 0
     tubesFound, matricesDecoded = 0,0
 
@@ -337,42 +337,52 @@ def processRack(filename):
     #make a list of cropped tube images
     tubeImages = []
     for dims in boundingRectDims:
-        tubeImg = cropAreaToTube(dims, rack)
+        tubeImg = crop_area_to_tube(dims, rack)
         if tubeImg.size != 0:
             tubeImages.append(tubeImg)
     tubesFound = len(tubeImages)
 
     #create a pool of processes to decode images in parallel
-    # p = Pool(4)
-    # codes = p.map(process_tube, tubeImages)
+    p = Pool(4)
+    codes = p.map(process_tube, tubeImages)
 
-    codes = []
-    for tube in tubeImages:
-        codes.append(process_tube(tube))
+    # codes = []
+    # for tube in tubeImages:
+    #     codes.append(process_tube(tube))
 
     for data in codes:
         if data:
             matricesDecoded += 1
             dataIndices.append(data)
 
-        ##add decoded data to coordinate-data dict
-        #coorToData[hash((x,y))] = data[0].data if data else 0
+    #if we're passed a queue, this is being called by a (multi)process, so add to queue
+    #with key filename so parent process can tell which image generated the data
+    if data_queue:
+        data_queue.put((filename, dataIndices, tubesFound, matricesDecoded))
+        return None, None, None
+    else:
+        return dataIndices, tubesFound, matricesDecoded
 
-        #if x > maxX:
-        #    maxX = x
-        #elif x < minX:
-        #    minX = x
+def location_assoc_stuff():
+    testcode = 0
+    ##add decoded data to coordinate-data dict
+    #coorToData[hash((x,y))] = data[0].data if data else 0
 
-        #newRow = True
-        ##add (x,y) tuple from rect to its row, depending on its y-coordinate
-        #for row in rowLists:
-        #    #put tube in row if its y coordinate is close enough to that of first member
-        #    if abs(y - row[0][1]) < SAME_ROW_THRESHOLD:
-        #        row.append((x,y))
-        #        newRow = False
-        ##put this in its own row if we haven't found one it fits in
-        #if newRow: #and len(rowLists) < NUM_ROWS:
-        #   rowLists.append([(x,y)])
+    #if x > maxX:
+    #    maxX = x
+    #elif x < minX:
+    #    minX = x
+
+    #newRow = True
+    ##add (x,y) tuple from rect to its row, depending on its y-coordinate
+    #for row in rowLists:
+    #    #put tube in row if its y coordinate is close enough to that of first member
+    #    if abs(y - row[0][1]) < SAME_ROW_THRESHOLD:
+    #        row.append((x,y))
+    #        newRow = False
+    ##put this in its own row if we haven't found one it fits in
+    #if newRow: #and len(rowLists) < NUM_ROWS:
+    #   rowLists.append([(x,y)])
 
     ##approx horizontal distance between each tube
     #horizDist = (maxX - minX)/(NUM_COLS-1)
@@ -390,10 +400,11 @@ def processRack(filename):
     ##sort dataIndices by x coordinate, then y
     #dataIndices.sort(key = (lambda x: x[0][0]*1000 + x[0][1]))
 
-    return(dataIndices, tubesFound, matricesDecoded)
+
+
 
 if __name__ == '__main__':
-    dataIndices, tubesFound, matricesDecoded = processRack(FILENAME)
+    dataIndices, tubesFound, matricesDecoded = process_rack(FILENAME)
     # print(dataIndices)
     print(f'tubes found: {tubesFound}')
     print(f'decoded: {matricesDecoded}')

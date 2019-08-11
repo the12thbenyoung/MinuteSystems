@@ -1,12 +1,22 @@
-import numpy as np
-import cv2
-from pylibdmtx.pylibdmtx import decode
-from findTubes import *
+from dataMatrixDecoder import process_rack
+from multiprocessing import Pool, Process, Queue
+from time import sleep
 
-img = cv2.imread('shpongus.jpg')
-gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+paths = ['image.jpg', 'shpongus.jpg']
+process_list = []
+data_queue = Queue()
 
-data = decode(gray)
-print(data)
-print(len(data))
+for path in paths:
+    proc = Process(target=process_rack, args=(path,data_queue))
+    proc.start()
+    process_list.append(proc)
 
+for proc in process_list:
+    proc.join()
+
+while not data_queue.empty():
+    filename, dataIndices, tubesFound, matricesDecoded = data_queue.get()
+    print(filename)
+    print(dataIndices)
+    print(f'tubes found: {tubesFound}')
+    print(f'decoded: {matricesDecoded}')

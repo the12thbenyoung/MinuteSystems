@@ -1,11 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
-from findTubes import process_matrix, find_largest_contour, crop_smallest_rect
 
 from pylibdmtx.pylibdmtx import decode
 from os import listdir
 from multiprocessing import Pool, Process, Queue
+
+from dataMatrixDecoder import process_rack
 
 def show_image_small(name, img):
     cv2.imshow(name, cv2.resize(img, (int(img.shape[1]/5), int(img.shape[0]/5)), interpolation=cv2.INTER_AREA))
@@ -30,6 +31,7 @@ paths = ['images', 'images2', 'images3']
 q = Queue()
 for path in paths:
     Process(target=runRack, args=(path,q)).start()
+
 
 print(q.get())
 print(q.get())
