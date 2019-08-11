@@ -1,16 +1,21 @@
 #thanks to:
 #boundingRec://gist.github.com/bigsnarfdude/d811e31ee17495f82f10db12651ae82d#file-gistfile1-txt-L33k
 
+#TODO: define MATRIX_SIZE_LOWER/UPPER_BOUND as a function of x position
+#TODO: check number of contours after tube is cropped to avoid extra processing
+    #on wells without tubes
+
+
 import cv2
 import numpy as np
 from pylibdmtx.pylibdmtx import decode
 from multiprocessing import Pool, Process, Queue
 
-FILENAME = 'chungis.jpg'
+FILENAME = 'shpongus.jpg'
 
-SHOW_IMAGES = 0
+SHOW_IMAGES = 1
 SHOW_RACK = 0
-PRINT_CONTOUR_SIZES = 0
+PRINT_CONTOUR_SIZES = 1
 
 #max number of pixels of different between y coordinates for tubes to be considered in same row
 SAME_ROW_THRESHOLD = 70
@@ -19,8 +24,6 @@ SAME_ROW_THRESHOLD = 70
 NUM_ROWS = 8
 NUM_COLS = 12
 
-#for cropping rack from original image
-RACK_THRESH_FACTOR = 0.75
 #for cropping tube area (tube+rims/shadows) from rack
 TUBE_AREA_THRESH_FACTOR = 0.26
 TUBE_AREA_THRESH_CONSTANT = 25
@@ -29,7 +32,7 @@ TUBE_THRESH_FACTOR = 0.80
 #for cropping data matrix from harris corner heatmap image
 HARRIS_THRESH_FACTOR = 0.01
 #for removing surrounding numbers but keeping data matrix
-NUMBERS_THRESH_FACTOR = 0.25
+NUMBERS_THRESH_FACTOR = 0.30
 #for thresholding matrix after it's been cropped from tube
 MATRIX_THRESH_FACTOR = 0.35
 
@@ -90,8 +93,8 @@ def outputData(filename, dataIndices):
 def find_largest_contour(img, threshFactor):
     x, thr = cv2.threshold(img, threshFactor * img.max(), 255, cv2.THRESH_BINARY)
 
-    if SHOW_IMAGES:
-        cv2.imshow('thr', thr)
+    # if SHOW_IMAGES:
+    #     cv2.imshow('thr', thr)
 
     #get outer contour of data matrix
     thr = thr.astype('uint8')
@@ -127,10 +130,6 @@ def crop_smallest_rect(img, contour, edgePix):
     # now rotated rectangle becomes vertical and we crop it
     img_crop = cv2.getRectSubPix(img_rot, size, center)
 
-    if SHOW_IMAGES:
-        cv2.imshow('crop', img_crop)
-        cv2.waitKey(0)
-
     return img_crop
 
 # like crop_smallest_rect, but bounding rect isn't rotated and thus can be cropped directly
@@ -142,14 +141,16 @@ def crop_bounding_rect(img, contour, edge_pix):
     img_crop = img[y+edge_pix : y+h-edge_pix, x+edge_pix : x+w-edge_pix]
     return img_crop
 
-def cropToHarris(img, blockSize, numbersThreshFactor, harris = np.array([])):
+
+def crop_to_harris(img, blockSize, numbersThreshFactor, harris = np.array([])):
     #we only pass in harris if matrix is too small, in which case we dilate it
     if harris.size != 0:
         harris = cv2.dilate(harris, dilationKernel, iterations=1)
-    #otherwise we need to find it again with new numbersThreshFactor
+    #otherwise matrix is too big, so find it again with larger numbersThreshFactor
     else:
         #hopefully remove numbers while keeping matrix
         _, thr = cv2.threshold(img, numbersThreshFactor* img.max(), 255, cv2.THRESH_BINARY)
+        # cv2.imshow('thr', thr)
 
         #detect corners
         opening = cv2.morphologyEx(thr, cv2.MORPH_OPEN, morphologyKernel)
@@ -161,24 +162,37 @@ def cropToHarris(img, blockSize, numbersThreshFactor, harris = np.array([])):
 
         #crop out matrix from tube
         matrix = crop_smallest_rect(img, contour, MATRIX_EDGE_PIXELS)
+
+        # cv2.imshow('matrix', matrix)
+        # cv2.waitKey(0)
+
         height, width = matrix.shape[0], matrix.shape[1]
         return matrix, harris, height, width
     else:
         return np.array([]), harris, 0, 0
 
-
-def processMatrix(img, blockSize, threshFactor):
+def process_matrix(img, blockSize, threshFactor):
     if img.size != 0:
         numbersThreshFactor = NUMBERS_THRESH_FACTOR
-        matrix, harris, height,  width = cropToHarris(img, blockSize, NUMBERS_THRESH_FACTOR)
+        matrix, harris, height,  width = crop_to_harris(img, blockSize, NUMBERS_THRESH_FACTOR)
+        if SHOW_IMAGES:
+            cv2.imshow('crop', matrix)
+            cv2.waitKey(0)
+
+        if PRINT_CONTOUR_SIZES:
+            print(height, width)
 
         #if matrix is too big, raise NUMBERS_THRESH_FACTOR to try to crop out numbers 
         #and just get matrix
         iters = 0
-        while any([dim > MATRIX_SIZE_UPPER_BOUND
-                   for dim in [height, width]]) and iters < MAX_DILATE_ITERS:
+        #if one side is too small we just want to skip to the too-small iteration below
+        while all([dim > bound \
+                    for dim in [height, width] \
+                    for bound in [MATRIX_SIZE_UPPER_BOUND, MATRIX_SIZE_LOWER_BOUND]]) \
+              and iters < MAX_DILATE_ITERS:
             numbersThreshFactor += NUMBERS_THRESH_INCREMENT
-            matrix, harris, height, width = cropToHarris(img, \
+            # print('too big', height, width)
+            matrix, harris, height, width = crop_to_harris(img, \
                                                          blockSize, \
                                                          numbersThreshFactor)
             iters += 1
@@ -189,7 +203,7 @@ def processMatrix(img, blockSize, threshFactor):
         iters = 0
         while any([dim < MATRIX_SIZE_LOWER_BOUND
                    for dim in [height, width]]) and iters < MAX_DILATE_ITERS:
-            matrix, harris, height, width = cropToHarris(img, \
+            matrix, harris, height, width = crop_to_harris(img, \
                                                          blockSize, \
                                                          NUMBERS_THRESH_FACTOR,
                                                          harris = harris)
@@ -198,29 +212,42 @@ def processMatrix(img, blockSize, threshFactor):
         #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
         #can use this to filter out some of them
         if height/width < 1.5 and width/height < 1.5:
-            if PRINT_CONTOUR_SIZES:
-                print(height, width)
-            #blur and then otsu threshold matrix
-            decode1 = decode(matrix)
 
-            matrix_blur = cv2.GaussianBlur(matrix, (5,5), 0)
-            _, matrix_thr = cv2.threshold(matrix_blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            decode2 = decode(matrix_thr)
+            #only otsu threshold matrix if it's cropped nicely - otherwise lighter surrounding
+            #colors will mess it up
+            if all([dim < MATRIX_SIZE_UPPER_BOUND and dim > MATRIX_SIZE_LOWER_BOUND
+                    for dim in [height, width]]):
+                matrix_blur = cv2.GaussianBlur(matrix, (5,5), 0)
+                _, matrix_thr = cv2.threshold(matrix_blur, 0, 255, \
+                                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                decoded_matrix = decode(matrix_thr)
 
-            if decode1 and not decode2:
-                print('!!!!!!!!!!!!!!!!!!BAD!!!!!!!!!!!!!!!!!!!!')
-            if decode2 and not decode1:
-                print('!!!!!!!!!!!!!!!!!!GOOD!!!!!!!!!!!!!!!!!!!!')
-            return decode(matrix_thr), matrix_thr
+                #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ALERT TAKE THIS OUT ALERT$$$$$$$$$$$$$$$$$$$$$$$
+                decoded_matrix1 = decode(matrix)
+                #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ALERT TAKE THIS OUT ALERT$$$$$$$$$$$$$$$$$$$$$$$
+
+                if decoded_matrix1 and not decoded_matrix:
+                    print('!!!!!!!!!!!!!!!!!!BAD!!!!!!!!!!!!!!!!!!!!')
+                if decoded_matrix and not decoded_matrix1:
+                    print('!!!!!!!!!!!!!!!!!!GOOD!!!!!!!!!!!!!!!!!!!!')
+            else:
+                decoded_matrix = decode(matrix)
+
+            # cv2.imshow('matrix', matrix)
+            # cv2.imshow('matrix_thr', matrix_thr)
+            # cv2.waitKey(0)
+
+            return decoded_matrix
         else:
             print('zoinks scoob thats a bad aspect ratio')
-            return None, matrix
+            return None
     else:
-        return None, img
+        return None
 
-def processTube(tube):
+
+def process_tube(tube):
     global badcount
-    data, matrix = processMatrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR)
+    data = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR)
 
     if not data:
         #if this failed, just run on uncropped tube
@@ -252,8 +279,8 @@ def cropAreaToTube(dims, rack):
     else:
         return np.array([])
     
-    if SHOW_IMAGES:
-        cv2.imshow('tube', tube)
+    # if SHOW_IMAGES:
+    #     cv2.imshow('tube', tube)
 
     return tube
 
@@ -263,12 +290,7 @@ def processRack(filename):
 
     img = cv2.imread(filename)
     #convert to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    #rackContour = find_largest_contour(gray, RACK_THRESH_FACTOR)
-    ##crop to just rack 
-    #rack = crop_smallest_rect(gray, rackContour, 0)
-    rack = gray
+    rack = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     #threshold and invert to get tubes in white
     # x, rack_thr = cv2.threshold(rack, TUBE_AREA_THRESH_FACTOR * rack.max(), 255, cv2.THRESH_BINARY)
@@ -299,8 +321,9 @@ def processRack(filename):
     maxX = -1*float('inf')
     minX = float('inf')
 
-    for c in contours:
-        print(cv2.boundingRect(c))
+    # for c in contours:
+    #     print(cv2.boundingRect(c))
+
     #smallest non-rotated bounding rectangle for each contour
     #and filter our those which are too small
     boundingRectDims = filter(lambda c: c['w'] > TUBE_WIDTH_LOWER_BOUND and \
@@ -321,11 +344,11 @@ def processRack(filename):
 
     #create a pool of processes to decode images in parallel
     # p = Pool(4)
-    # codes = p.map(processTube, tubeImages)
+    # codes = p.map(process_tube, tubeImages)
 
     codes = []
     for tube in tubeImages:
-        codes.append(processTube(tube))
+        codes.append(process_tube(tube))
 
     for data in codes:
         if data:

@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 
@@ -47,8 +46,11 @@ def process_matrix(img, blockSize, threshFactor):
         #if matrix is too big, raise NUMBERS_THRESH_FACTOR to try to crop out numbers 
         #and just get matrix
         iters = 0
-        while any([dim > MATRIX_SIZE_UPPER_BOUND
-                   for dim in [height, width]]) and iters < MAX_DILATE_ITERS:
+        #if one side is too small we just want to skip to the too-small iteration below
+        while all([dim > bound \
+                    for dim in [height, width] \
+                    for bound in [MATRIX_SIZE_UPPER_BOUND, MATRIX_SIZE_LOWER_BOUND]]) \
+              and iters < MAX_DILATE_ITERS:
             numbersThreshFactor += NUMBERS_THRESH_INCREMENT
             print('too big', height, width)
             matrix, harris, height, width = cropToHarris(img, \
@@ -73,11 +75,18 @@ def process_matrix(img, blockSize, threshFactor):
         if height/width < 1.5 and width/height < 1.5:
             if PRINT_CONTOUR_SIZES:
                 print(height, width)
-            #blur and then otsu threshold matrix
-            decode1 = decode(matrix)
 
-            matrix_blur = cv2.GaussianBlur(matrix, (5,5), 0)
-            _, matrix_thr = cv2.threshold(matrix_blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            #only otsu threshold matrix if it's cropped nicely - otherwise lighter surrounding
+            #colors will mess it up
+            if all([dim < MATRIX_SIZE_UPPER_BOUND and dim > MATRIX_SIZE_LOWER_BOUND
+                    for dim in [height, width]]):
+                matrix_blur = cv2.GaussianBlur(matrix, (5,5), 0)
+                _, matrix_thr = cv2.threshold(matrix_blur, 0, 255, \
+                                              cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                decode2 = decode(matrix_thr)
+            else:
+                decode1 = decode(matrix)
+
             decode2 = decode(matrix_thr)
             # cv2.imshow('matrix', matrix)
             # cv2.imshow('matrix_thr', matrix_thr)
@@ -95,7 +104,7 @@ def process_matrix(img, blockSize, threshFactor):
         return None, img
 
 if __name__ == '__main__':
-    img = cv2.imread('images/screenshot.jpg')
+    img = cv2.imread('images/badkek4.jpg')
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     data, matrix = process_matrix(gray, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR)
     print(data)
