@@ -55,7 +55,9 @@ def index():
 
 @app.route('/pick_tubes')
 def pick_tubes():
-    if 'trayDataList' in session:
+    if 'trayDataList' in session \
+        and len(session['trayDataList']) > 0 \
+        and len(session['trayDataList'][0]) > 0:
         next_tray_id = session['trayDataList'][0][0]
     else:
         print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
