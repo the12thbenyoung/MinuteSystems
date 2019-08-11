@@ -55,7 +55,13 @@ def index():
 
 @app.route('/pick_tubes')
 def pick_tubes():
-    return render_template('pick_tubes.html')
+    if 'trayDataList' in session:
+        next_tray_id = session['trayDataList'][0][0]
+    else:
+        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+        next_tray_id = None
+
+    return render_template('pick_tubes.html', nextTrayId = next_tray_id)
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -63,6 +69,9 @@ def allowed_file(filename):
 
 @app.route('/get_csv_file', methods=['GET', 'POST'])
 def get_csv_file():
+    os.system('rm ' + os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+    os.system('rm ' + os.path.join(WORKING_DIRECTORY, 'static/images/*.jpg'))
+
     if 'file' not in request.files:
         flash('No file part')
         return redirect(request.url)
@@ -98,7 +107,7 @@ def get_csv_file():
 
         trayDataZip = list(zip(trayIds, trayDataframes, numRacksList))
         session['trayDataList'] = trayDataZip
-        
+
         for i, (trayId, trayDataframe, numRacks) in enumerate(trayDataZip):
             #Maintains image showing the tubes in the tray which are present, 
             #have already been picked, and still have to be picked
@@ -107,6 +116,9 @@ def get_csv_file():
             viewer.newTray(trayDataframe[trayDataframe['TrayID'] == trayId])
             #save image of tray in 'static/images/' to to be shown in file_uploaded.html
             viewer.saveImage(os.path.join(WORKING_DIRECTORY, f'static/images/traydisplay{i}.jpg'))
+            if i == 0:
+                #only show first image in pick_tubes
+                viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
 
     return render_template('file_uploaded.html')
 
@@ -154,7 +166,21 @@ def check_tray():
 @app.route('/next_tray')
 def next_tray():
     print("Next Tray")
-    return render_template('pick_tubes.html')
+    trayDataList = session['trayDataList']
+    #if we're out of trayData, tell user tray is done
+    if len(trayDataList) == 0:
+        return render_template('done_with_file.html')
+
+    trayId, trayData, numRacks = trayDataList[0]
+
+    edgeLength = 25 if numRacks == 6 else 30
+    viewer = trayStatusViewer(edgeLength, numRacks, TUBES_ALONG_X, TUBES_ALONG_Y)
+    viewer.newTray(trayData)
+
+    #save image of tray in 'static/' to to be shown in run_tray
+    viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+
+    return render_template('pick_tubes.html', nextTrayId = trayId)
 
 if __name__ == '__main__':
     app.run(debug=True)#, host='0.0.0.0')
