@@ -10,7 +10,7 @@ class Motor:
     MICROSTEP = 4
 
     #A halfstep is 8? microsteps
-    MICROSTEPS_PER_RACK = 6805 #THIS IS A LITTLE TOO SMALL FIX IT
+    MICROSTEPS_PER_RACK = 6805
     MICROSTEPS_PER_TUBE = 722
 
     def __init__(self):

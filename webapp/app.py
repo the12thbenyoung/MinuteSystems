@@ -2,9 +2,8 @@ from flask import Flask, flash, render_template, request, redirect, send_from_di
 from flask_session import Session
 from werkzeug.utils import secure_filename
 import time
-# from adafruit_motorkit import MotorKit
-# from solenoids.solenoid import Solenoid
-# from motors.motor import Motor
+from solenoids.solenoidArray import SolenoidArray
+from motors.motor import Motor
 import pandas as pd
 from prod.trayStatusViewer import trayStatusViewer
 from numpy import unique
@@ -29,6 +28,10 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 app.config.from_object(__name__)
 Session(app)
+
+motor = Motor()
+
+solenoidArray = SolenoidArray()
 
 #convert 'B08' style input from file to (x,y) index tuple - (1,7)
 def convertRow(rowLetter):
@@ -149,15 +152,19 @@ def run_tray():
             columns.sort()
             for col in columns:
                 #move to rack,column
+                motor.moveToTube(int(rackId), int(col))
                 colData = rackData[rackData['TubeColumn'] == col]
                 for row in colData['TubeRow']:
                     print(tray, rackId, col, row)
                     #activate soleniod
+                    solenoidArray.actuateSolenoid(int(row))
                     viewer.pickTube(rackId, col, row)
 
         #save image of tray in 'static/images/' to to be shown in file_uploaded.html
         viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
-        
+
+        motor.returnHome()
+                
     return render_template('next_tray.html')
 
 @app.route('/check_tray')
