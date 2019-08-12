@@ -2,10 +2,12 @@ from flask import Flask, flash, render_template, request, redirect, send_from_di
 from flask_session import Session
 from werkzeug.utils import secure_filename
 import time
-from solenoids.solenoidArray import SolenoidArray
-from motors.motor import Motor
+# from solenoids.solenoidArray import SolenoidArray
+# from motors.motor import Motor
+from qr.dataMatrixDecoder import process_rack
 import pandas as pd
 from prod.trayStatusViewer import trayStatusViewer
+from multiprocessing import Pool, Process, Queue
 from numpy import unique
 import os
 
@@ -29,9 +31,9 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config.from_object(__name__)
 Session(app)
 
-motor = Motor()
+# motor = Motor()
 
-solenoidArray = SolenoidArray()
+# solenoidArray = SolenoidArray()
 
 #convert 'B08' style input from file to (x,y) index tuple - (1,7)
 def convertRow(rowLetter):
@@ -55,6 +57,36 @@ def nextTray(viewer, trayId, trayData):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/scan_trays')
+def scan_trays():
+    return render_template('/show_scan_results.html')
+
+@app.route('/run_scanner')
+def run_scanner():
+    img_names = ['qr/image.jpg', 'qr/shpongus.jpg']
+    img_paths = [os.path.join(WORKING_DIRECTORY, name) for name in img_names]
+    process_list = []
+    data_queue = Queue()
+
+    for path in img_paths:
+        proc = Process(target=process_rack, args=(path,data_queue))
+        proc.start()
+        process_list.append(proc)
+
+    for proc in process_list:
+        proc.join()
+
+    found_data_list = []
+    while not data_queue.empty():
+        filename, dataIndices, tubesFound, matricesDecoded = data_queue.get()
+        found_data_list.append([filename, tubesFound, matricesDecoded])
+        print(filename)
+        print(dataIndices)
+        print(f'tubes found: {tubesFound}')
+        print(f'decoded: {matricesDecoded}')
+
+    return found_data_list
 
 @app.route('/pick_tubes')
 def pick_tubes():
@@ -152,18 +184,18 @@ def run_tray():
             columns.sort()
             for col in columns:
                 #move to rack,column
-                motor.moveToTube(int(rackId), int(col))
+                # motor.moveToTube(int(rackId), int(col))
                 colData = rackData[rackData['TubeColumn'] == col]
                 for row in colData['TubeRow']:
                     print(tray, rackId, col, row)
                     #activate soleniod
-                    solenoidArray.actuateSolenoid(int(row))
+                    # solenoidArray.actuateSolenoid(int(row))
                     viewer.pickTube(rackId, col, row)
 
         #save image of tray in 'static/images/' to to be shown in file_uploaded.html
         viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
 
-        motor.returnHome()
+        # motor.returnHome()
                 
     return render_template('next_tray.html')
 

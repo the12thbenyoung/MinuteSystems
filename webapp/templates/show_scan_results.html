@@ -1,0 +1,30 @@
+{% extends "header.html" %}
+{% block body %}
+<head>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+    <script type=text/javascript>
+        $(function() {
+            $('a#process_input').bind('click', function() {
+                $.getJSON('/run_scanner', {
+                }, function(data) {
+                    $("#result").text(data.result);
+                });
+                return false
+            });
+        });
+    </script>
+</head>
+
+<body>
+    <div class='container'>
+    <h1>Wuss Boppin JimBo</h1>
+    <form>
+        <a href=# id=run_scan><button class='btn btn-default'>Run Scan</button></a>
+    </form>
+    <form action="/" method="get">
+        <input type="submit" value="Home">
+    </form>
+    <p id=result></p>
+    </div>
+</body>
+{% endblock %}

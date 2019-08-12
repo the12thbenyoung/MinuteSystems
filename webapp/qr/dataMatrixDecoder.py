@@ -408,6 +408,3 @@ if __name__ == '__main__':
     # print(dataIndices)
     print(f'tubes found: {tubesFound}')
     print(f'decoded: {matricesDecoded}')
-
-
-
