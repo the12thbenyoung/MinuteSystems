@@ -18,7 +18,7 @@ class SolenoidArray:
 
         def actuate(self):
             self.solenoid.on()
-            sleep(5)
+            sleep(.5)
             self.solenoid.off()
 
     def __init__(self):
