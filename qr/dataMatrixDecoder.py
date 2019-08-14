@@ -16,6 +16,7 @@ FILENAME = 'shpongus.jpg'
 SHOW_IMAGES = 0
 SHOW_RACK = 0
 PRINT_CONTOUR_SIZES = 0
+PRINT_MATRIX_SIZES = 0
 
 #max number of pixels of different between y coordinates for tubes to be considered in same row
 SAME_ROW_THRESHOLD = 70
@@ -41,7 +42,7 @@ HARRIS_BLOCK_SIZE = 6
 
 #typical edge lengths of contour bounding boxes of tube areas
 TUBE_HEIGHT_LOWER_BOUND = 150
-TUBE_HEIGHT_UPPER_BOUND = 250
+TUBE_HEIGHT_UPPER_BOUND = 275
 TUBE_WIDTH_LOWER_BOUND = 150
 TUBE_WIDTH_UPPER_BOUND = 500
 
@@ -93,8 +94,8 @@ def output_data(filename, dataIndices):
 def find_largest_contour(img, threshFactor):
     x, thr = cv2.threshold(img, threshFactor * img.max(), 255, cv2.THRESH_BINARY)
 
-    # if SHOW_IMAGES:
-    #     cv2.imshow('thr', thr)
+    if SHOW_IMAGES:
+        cv2.imshow('thr', thr)
 
     #get outer contour of data matrix
     thr = thr.astype('uint8')
@@ -174,12 +175,12 @@ def crop_to_harris(img, blockSize, numbers_thresh_factor, harris = np.array([]))
 def process_matrix(img, blockSize, threshFactor):
     if img.size != 0:
         numbers_thresh_factor = NUMBERS_THRESH_FACTOR
-        matrix, harris, height,  width = crop_to_harris(img, blockSize, NUMBERS_THRESH_FACTOR)
+        matrix, harris, height, width = crop_to_harris(img, blockSize, NUMBERS_THRESH_FACTOR)
         if SHOW_IMAGES:
             cv2.imshow('crop', matrix)
             cv2.waitKey(0)
 
-        if PRINT_CONTOUR_SIZES:
+        if PRINT_MATRIX_SIZES:
             print(height, width)
 
         #if matrix is too big, raise NUMBERS_THRESH_FACTOR to try to crop out numbers 
@@ -222,9 +223,9 @@ def process_matrix(img, blockSize, threshFactor):
                                               cv2.THRESH_BINARY + cv2.THRESH_OTSU)
                 decoded_matrix = decode(matrix_thr)
 
-                #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ALERT TAKE THIS OUT ALERT$$$$$$$$$$$$$$$$$$$$$$$
+                #TODO$$$$$$$$$$$$$$$$$$$$$$$$ALERT TAKE THIS OUT ALERT$$$$$$$$$$$$$$$$$$$$$$$
                 decoded_matrix1 = decode(matrix)
-                #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ALERT TAKE THIS OUT ALERT$$$$$$$$$$$$$$$$$$$$$$$
+                #TODO$$$$$$$$$$$$$$$$$$$$$$$$ALERT TAKE THIS OUT ALERT$$$$$$$$$$$$$$$$$$$$$$$
 
                 if decoded_matrix1 and not decoded_matrix:
                     print('!!!!!!!!!!!!!!!!!!BAD!!!!!!!!!!!!!!!!!!!!')
@@ -247,6 +248,9 @@ def process_matrix(img, blockSize, threshFactor):
 
 def process_tube(tube):
     global badcount
+    if SHOW_IMAGES:
+        cv2.imshow('tube', tube)
+
     data = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR)
 
     if not data:
@@ -279,9 +283,6 @@ def crop_area_to_tube(dims, rack):
     else:
         return np.array([])
     
-    # if SHOW_IMAGES:
-    #     cv2.imshow('tube', tube)
-
     return tube
 
 def process_rack(filename, data_queue = None):
@@ -290,24 +291,34 @@ def process_rack(filename, data_queue = None):
 
     img = cv2.imread(filename)
     #convert to grayscale
-    rack = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    rack_original = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    #camera has to be at an angle to be in focus, meaning tubes on the right side are
+    #smaller than their bretheren on the left. Warp perspective to correct this
+    rows,cols = rack_original.shape
+
+    source_pts = np.float32([[0,0],[0,rows-1],[cols-1,200],[cols-1,rows-200]])
+    destination_pts = np.float32([[0,0],[0,rows-1],[cols-1,0],[cols-1,rows-1]])
+    distort_matrix = cv2.getPerspectiveTransform(source_pts,destination_pts)
+    rack_warp = cv2.warpPerspective(rack_original,distort_matrix,(cols,rows))
 
     #threshold and invert to get tubes in white
     # x, rack_thr = cv2.threshold(rack, TUBE_AREA_THRESH_FACTOR * rack.max(), 255, cv2.THRESH_BINARY)
-    rack_blur = cv2.GaussianBlur(rack,(5,5),0)
+    rack_blur = cv2.GaussianBlur(rack_warp,(5,5),0)
     rack_thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
                                        cv2.THRESH_BINARY_INV,301,TUBE_AREA_THRESH_CONSTANT)
     #erode image to try to get rid of white bridges between tubes and gaps on side of rack
     # rack_erode = cv2.erode(rack_thr, erosionKernel, iterations=1)
     #open to remove noise and give smaller number of contours
-    rack_opening = cv2.morphologyEx(rack_thr, cv2.MORPH_OPEN, morphologyKernel, iterations=5)
+    rack_open = cv2.morphologyEx(rack_thr, cv2.MORPH_OPEN, morphologyKernel, iterations=5)
+
 
     if SHOW_RACK:
-        show_image_small(['rack_opening', rack_opening])
+        show_image_small(['rack', rack_open])
         exit(0)
 
     #get contours around tubes
-    contours, hierarchy = cv2.findContours(rack_opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, hierarchy = cv2.findContours(rack_open, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     #each set holds a group of points with similar y-coordinate - corresponding to one row in the rack
     rowLists = []
@@ -321,8 +332,11 @@ def process_rack(filename, data_queue = None):
     maxX = -1*float('inf')
     minX = float('inf')
 
-    # for c in contours:
-    #     print(cv2.boundingRect(c))
+    if PRINT_CONTOUR_SIZES:
+        for c in contours:
+            print(cv2.boundingRect(c))
+            cv2.imshow('crop', crop_bounding_rect(rack_warp, c, 0))
+            cv2.waitKey(0)
 
     #smallest non-rotated bounding rectangle for each contour
     #and filter our those which are too small
@@ -337,18 +351,18 @@ def process_rack(filename, data_queue = None):
     #make a list of cropped tube images
     tubeImages = []
     for dims in boundingRectDims:
-        tubeImg = crop_area_to_tube(dims, rack)
+        tubeImg = crop_area_to_tube(dims, rack_warp)
         if tubeImg.size != 0:
             tubeImages.append(tubeImg)
     tubesFound = len(tubeImages)
 
-    #create a pool of processes to decode images in parallel
-    p = Pool(4)
-    codes = p.map(process_tube, tubeImages)
+    ##create a pool of processes to decode images in parallel
+    #p = Pool(4)
+    #codes = p.map(process_tube, tubeImages)
 
-    # codes = []
-    # for tube in tubeImages:
-    #     codes.append(process_tube(tube))
+    codes = []
+    for tube in tubeImages:
+        codes.append(process_tube(tube))
 
     for data in codes:
         if data:
