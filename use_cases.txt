@@ -1,0 +1,30 @@
+The user navigates to the main page which displays two buttons called "picking" and "scanning".
+
+	The "picking" button goes to a page where the user uploads a csv file by clicking an "upload" button
+
+		The "upload" button displays a page saying "Ready to scan a tray, please put tray '#' on the machine" and displays the first trays image with a "scan tray" button
+
+			The "scan tray" button scans the tray and displays "Tray scanned, number of desired tube incorrect: '#', total number of tubes incorrect: '#'
+			This page also shows a picture of the scanned trays info with a legend
+			This page also has buttons called "scan again", "skip tray", "abort order", "run tray"
+
+				If the user put the wrong tube on or if the scanner was wrong they press "scan again" and it scans and returns to the same page
+
+				If there are non-critical differences or no differences then the user can press "run tray" and it will run the tray
+				This page also shows "Tray ran" and displays the new image with legend and shows the number of error
+				This page also shows buttons for "scan again", "next tray"
+				This page also displays "this tube '#' should not have been retrieved but was, please put it back in the tray" if there was a false positive
+				This page also displays "this tube '#' should have been retrieved but was not, please pick it out" if there was a false negative
+
+					If the tray needs to be scanned again the user can press "scan again" and it will scan the tray and bring them back to the tray ran page
+
+					If the tray has been ran sucessfully the user can press next tray and the page saying ready to scan a tray is shown
+					or a page saying order complete will be show and a button saying "back to main page" and the csv file will be sent
+
+						The "back to main page" button will go back to the main page
+
+				If the tray was missing some or all of the desired tubes then the user can press "skip tray" and the page for scannign the next tray will show up
+
+				If the tray was missing some or all of the desired tubes then the user can press "abort order" and the csv file will be sent and the main page will be shown
+
+	The "scanning" button
