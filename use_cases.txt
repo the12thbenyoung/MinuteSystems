@@ -27,4 +27,10 @@ The user navigates to the main page which displays two buttons called "picking" 
 
 				If the tray was missing some or all of the desired tubes then the user can press "abort order" and the csv file will be sent and the main page will be shown
 
-	The "scanning" button
+	The "scanning" button goes to a page which displays "Please place a tray on the machine and enter the tray id" and has a form for entering the tray id
+		
+		That form goes to a page displaying "Please enter rack ids for each rack" with inputs for racks 1 - 6
+
+			The next page displays the tray id and rack ids and says "Please check the ids to make sure they are correct" and has a "scan tray" button
+
+				The "scan tray" button scans the tray and displays the tray image and a button to write and send the csv file

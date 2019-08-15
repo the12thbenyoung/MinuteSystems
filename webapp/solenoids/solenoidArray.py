@@ -23,12 +23,12 @@ class SolenoidArray:
 
     def __init__(self):
         self.solenoids = [
-            self.Solenoid(17),
             self.Solenoid(18),
             self.Solenoid(27),
             self.Solenoid(22),
             self.Solenoid(23),
             self.Solenoid(24),
+            self.Solenoid(25),
             self.Solenoid(5),
             self.Solenoid(6),
             self.Solenoid(12),
