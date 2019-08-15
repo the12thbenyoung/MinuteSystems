@@ -6,7 +6,9 @@ order = ""
 
 print("Commands: exit, pop")
 
-while (order != "exit"):
-    order = input("Enter a command: ")
-    if (order == "pop"):
-        solenoidArray.actuateSolenoid(0)
+while (order != -1):
+    order = int(input("Enter a command: "))
+    #if (order == "pop"):
+        #row = int(input("Enter a row: "))
+    if (order != -1):
+        solenoidArray.actuateSolenoid(order)

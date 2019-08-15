@@ -3,7 +3,7 @@ from gpiozero import Button
 
 class Motor:
     
-    limitSwitch = Button(21)
+    limitSwitch = Button(18)
 
     #Constants from stepper class
     BACKWARD = 2
@@ -12,12 +12,12 @@ class Motor:
     INTERLEAVED = 3
     MICROSTEP = 4
 
-    #A halfstep is 8? microsteps
+    #A step is 16 microsteps
     MICROSTEPS_PER_RACK = 6805
     MICROSTEPS_PER_TUBE = 722
     
     CAMERA_OFFSET = 2402 #TEST THIS
-    RACK_OFFSET = 6805 # TEST THIS
+    RACK_OFFSET = 7045
 
     def __init__(self):
         self.kit = MotorKit()

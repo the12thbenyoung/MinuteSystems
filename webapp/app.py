@@ -164,6 +164,7 @@ def run_tray():
         viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
 
         motor.returnHome()
+        motor.release()
                 
     return render_template('next_tray.html')
 
