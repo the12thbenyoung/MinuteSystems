@@ -17,6 +17,7 @@ SHOW_IMAGES = 0
 SHOW_RACK = 0
 PRINT_CONTOUR_SIZES = 0
 PRINT_MATRIX_SIZES = 0
+DRAW_CONTOURS = 0
 
 #max number of pixels of different between y coordinates for tubes to be considered in same row
 SAME_ROW_THRESHOLD = 70
@@ -26,7 +27,6 @@ NUM_ROWS = 8
 NUM_COLS = 12
 
 #for cropping tube area (tube+rims/shadows) from rack
-TUBE_AREA_THRESH_FACTOR = 0.26
 TUBE_AREA_THRESH_CONSTANT = 25
 #for cropping just circular tube from tube area
 TUBE_THRESH_FACTOR = 0.80
@@ -43,32 +43,29 @@ HARRIS_BLOCK_SIZE = 6
 #typical edge lengths of contour bounding boxes of tube areas
 TUBE_HEIGHT_LOWER_BOUND = 150
 TUBE_HEIGHT_UPPER_BOUND = 275
-TUBE_WIDTH_LOWER_BOUND = 150
-TUBE_WIDTH_UPPER_BOUND = 500
+TUBE_WIDTH_LOWER_BOUND = 110
+TUBE_WIDTH_UPPER_BOUND = 300
 
 #approx pixel edge length of perfectly cropped matrix
 MATRIX_SIZE_LOWER_BOUND = 95
-MATRIX_SIZE_UPPER_BOUND = 105
+MATRIX_SIZE_UPPER_BOUND = 120
 
-#smallest expected area of a contour containing a matrix in the harris image
-MIN_MATRIX_CONTOUR_AREA = 4000
-
-#amount to adjust HARRIS_THRESH_FACTOR by when trying to crop matrix
-THRESH_INCREMENT_UP = 0.003
-THRESH_INCREMENT_DOWN = 0.001
-
+#amount to adjust NUMBERS_THRESH_FACTOR by when trying to crop matrix
 NUMBERS_THRESH_INCREMENT = 0.025
 
 #pixel dimension of kernel square
 MORPHOLOGY_KERNEL_SIZE=3
 #kernel for morphology
-morphologyKernel = np.ones((MORPHOLOGY_KERNEL_SIZE, MORPHOLOGY_KERNEL_SIZE), np.uint8)
+morphology_kernel = np.ones((MORPHOLOGY_KERNEL_SIZE, MORPHOLOGY_KERNEL_SIZE), np.uint8)
 
 DILATION_KERNEL_SIZE=2
-dilationKernel = np.ones((DILATION_KERNEL_SIZE, DILATION_KERNEL_SIZE), np.uint8)
+dilation_kernel = np.ones((DILATION_KERNEL_SIZE, DILATION_KERNEL_SIZE), np.uint8)
 
-EROSION_KERNEL_SIZE=5
-erosionKernel = np.ones((EROSION_KERNEL_SIZE, EROSION_KERNEL_SIZE), np.uint8)
+RACK_EROSION_KERNEL_SIZE=5
+rack_erosion_kernel = np.ones((RACK_EROSION_KERNEL_SIZE, RACK_EROSION_KERNEL_SIZE), np.uint8)
+
+TUBE_EROSION_KERNEL_SIZE=3
+tube_erosion_kernel = np.ones((TUBE_EROSION_KERNEL_SIZE, TUBE_EROSION_KERNEL_SIZE), np.uint8)
 
 #max number of times to run dilation
 MAX_DILATE_ITERS = 10
@@ -76,12 +73,26 @@ MAX_DILATE_ITERS = 10
 #extra pixels added to edge of matrix crop
 MATRIX_EDGE_PIXELS = 5
 
+#left col bound of area where too-narrow contours are extended
+CONTOUR_EXTEND_LOWER_X = 2800
+#if contour is narrower than this number pixels, extend it to the right until it's this wide
+TUBE_MIN_WIDTH = 180
+
+#min number of contours a tube must have for it to be processed
+MIN_CONTOURS_IN_MATRIX = 10
+
 badcount = 0
 
 def show_image_small(*args):
     for (name, img) in args:
         cv2.imshow(name, cv2.resize(img, (int(img.shape[1]/5), int(img.shape[0]/5)), interpolation=cv2.INTER_AREA))
     cv2.waitKey(0)
+
+def draw_contour_boxes(img, bounding_rect_dims):
+    for dim in bounding_rect_dims:
+        cv2.rectangle(img, (dim['x'], dim['y']), (dim['x'] + dim['w'], dim['y'] + dim['h']), 1, thickness=5)
+    show_image_small(['rack', img])
+    exit(0)
 
 def output_data(filename, dataIndices):
     with open(filename, 'w') as file:
@@ -146,7 +157,7 @@ def crop_bounding_rect(img, contour, edge_pix):
 def crop_to_harris(img, blockSize, numbers_thresh_factor, harris = np.array([])):
     #we only pass in harris if matrix is too small, in which case we dilate it
     if harris.size != 0:
-        harris = cv2.dilate(harris, dilationKernel, iterations=1)
+        harris = cv2.dilate(harris, dilation_kernel, iterations=1)
     #otherwise matrix is too big, so find it again with larger numbers_thresh_factor
     else:
         #hopefully remove numbers while keeping matrix
@@ -154,7 +165,7 @@ def crop_to_harris(img, blockSize, numbers_thresh_factor, harris = np.array([]))
         # cv2.imshow('thr', thr)
 
         #detect corners
-        opening = cv2.morphologyEx(thr, cv2.MORPH_OPEN, morphologyKernel)
+        opening = cv2.morphologyEx(thr, cv2.MORPH_OPEN, morphology_kernel)
         harris = cv2.cornerHarris(opening, HARRIS_BLOCK_SIZE, 1, 0.00)
   
     contour = find_largest_contour(harris, HARRIS_THRESH_FACTOR)
@@ -251,6 +262,16 @@ def process_tube(tube):
     if SHOW_IMAGES:
         cv2.imshow('tube', tube)
 
+    #if there aren't many contours this is probably an empty well, so don't waste time
+    #trying to process it
+    tube_thr = cv2.adaptiveThreshold(tube,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+                                       cv2.THRESH_BINARY,301,0)
+    tube_erode = cv2.erode(tube_thr, tube_erosion_kernel, iterations=1)
+
+    contours, _ = cv2.findContours(tube_erode, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) < MIN_CONTOURS_IN_MATRIX:
+        return None
+
     data = process_matrix(tube, HARRIS_BLOCK_SIZE, HARRIS_THRESH_FACTOR)
 
     if not data:
@@ -302,16 +323,15 @@ def process_rack(filename, data_queue = None):
     distort_matrix = cv2.getPerspectiveTransform(source_pts,destination_pts)
     rack_warp = cv2.warpPerspective(rack_original,distort_matrix,(cols,rows))
 
-    #threshold and invert to get tubes in white
-    # x, rack_thr = cv2.threshold(rack, TUBE_AREA_THRESH_FACTOR * rack.max(), 255, cv2.THRESH_BINARY)
     rack_blur = cv2.GaussianBlur(rack_warp,(5,5),0)
     rack_thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
                                        cv2.THRESH_BINARY_INV,301,TUBE_AREA_THRESH_CONSTANT)
-    #erode image to try to get rid of white bridges between tubes and gaps on side of rack
-    # rack_erode = cv2.erode(rack_thr, erosionKernel, iterations=1)
-    #open to remove noise and give smaller number of contours
-    rack_open = cv2.morphologyEx(rack_thr, cv2.MORPH_OPEN, morphologyKernel, iterations=5)
 
+    # erode image to try to get rid of white bridges between tubes and gaps on side of rack
+    rack_erode = cv2.erode(rack_thr, rack_erosion_kernel, iterations=1)
+
+    #open to remove noise and give smaller number of contours
+    rack_open = cv2.morphologyEx(rack_thr, cv2.MORPH_OPEN, morphology_kernel, iterations=5)
 
     if SHOW_RACK:
         show_image_small(['rack', rack_open])
@@ -340,28 +360,35 @@ def process_rack(filename, data_queue = None):
 
     #smallest non-rotated bounding rectangle for each contour
     #and filter our those which are too small
-    boundingRectDims = filter(lambda c: c['w'] > TUBE_WIDTH_LOWER_BOUND and \
+    bounding_rect_dims = list(filter(lambda c: c['w'] > TUBE_WIDTH_LOWER_BOUND and \
                                         c['w'] < TUBE_WIDTH_UPPER_BOUND and \
                                         c['h'] > TUBE_HEIGHT_LOWER_BOUND and\
                                         c['h'] < TUBE_HEIGHT_UPPER_BOUND, \
                               map(lambda c: dict(zip(('x','y','w','h'), \
                                                      cv2.boundingRect(c))), \
-                                  contours))
+                                  contours)))
 
     #make a list of cropped tube images
-    tubeImages = []
-    for dims in boundingRectDims:
+    tube_images = []
+    for dims in bounding_rect_dims:
+        #contours on the extreme right of the image are often too narrow and don't
+        #cover the right part of the matrix. So if width is too small, extend to the right
+        if dims['x'] > CONTOUR_EXTEND_LOWER_X and dims['w'] < TUBE_MIN_WIDTH:
+            dims['w'] += TUBE_MIN_WIDTH - dims['w']
         tubeImg = crop_area_to_tube(dims, rack_warp)
         if tubeImg.size != 0:
-            tubeImages.append(tubeImg)
-    tubesFound = len(tubeImages)
+            tube_images.append(tubeImg)
+    tubesFound = len(tube_images)
+
+    if DRAW_CONTOURS:
+        draw_contour_boxes(rack_warp, bounding_rect_dims)
 
     ##create a pool of processes to decode images in parallel
     #p = Pool(4)
-    #codes = p.map(process_tube, tubeImages)
+    #codes = p.map(process_tube, tube_images)
 
     codes = []
-    for tube in tubeImages:
+    for tube in tube_images:
         codes.append(process_tube(tube))
 
     for data in codes:
