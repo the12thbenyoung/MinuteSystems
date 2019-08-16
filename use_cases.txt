@@ -2,7 +2,7 @@ The user navigates to the main page which displays two buttons called "picking" 
 
 	The "picking" button goes to a page where the user uploads a csv file by clicking an "upload" button
 
-		The "upload" button displays a page saying "Ready to scan a tray, please put tray '#' on the machine" and displays the first trays image with a "scan tray" button and a "cancel order" button
+		The "upload" button displays a page saying "Ready to scan a tray, please put tray '#' on the machine" and displays the first trays image with a "scan tray" button and a "abort order" button
 
 			The "scan tray" button scans the tray and displays "Tray scanned, number of desired tube incorrect: '#', total number of tubes incorrect: '#'
 			This page also shows a picture of the scanned trays info with a legend
@@ -31,4 +31,6 @@ The user navigates to the main page which displays two buttons called "picking" 
 
 		The next page displays the tray id and rack ids and says "Please check the ids to make sure they are correct" and has a "scan tray" button and a "change ids" button
 
-			The "scan tray" button scans the tray and displays the tray image and a button to write and send the csv file and a button to rescan the tray
+			The "scan tray" button scans the tray and displays the tray image and a button to write and send the csv file and a button to rescan the tray and a button to go back to the main page
+
+			The "change ids" button goes back to the enter ids page

@@ -56,17 +56,9 @@ def nextTray(viewer, trayId, trayData):
 def index():
     return render_template('index.html')
 
-@app.route('/pick_tubes')
-def pick_tubes():
-    if 'trayDataList' in session \
-        and len(session['trayDataList']) > 0 \
-        and len(session['trayDataList'][0]) > 0:
-        next_tray_id = session['trayDataList'][0][0]
-    else:
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        next_tray_id = None
-
-    return render_template('pick_tubes.html', nextTrayId = next_tray_id)
+@app.route('/picking_begin')
+def picking_begin():
+    return render_template('upload_file.html')
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -125,15 +117,83 @@ def get_csv_file():
                 #only show first image in pick_tubes
                 viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
 
-    return render_template('file_uploaded.html')
+    return render_template('picking_scan_tray.html')
 
-@app.route('/download_it')
-def download_it():
-    return send_file('output.csv', mimetype='text/csv',
-                     attachment_filename='output.csv', as_attachment=True)
+@app.route('/picking_scan_tray')
+def picking_scan_tray():
+    #Scan it
+    return render_template('picking_tray_scanned.html')
+
+@app.route('/abort_order')
+def abort_order():
+    #Abort it
+    return render_template('index.html')
+
+@app.route('/skip_tray')
+def skip_tray():
+    #Skip it
+    return render_template('picking_scan_tray.html')
 
 @app.route('/run_tray')
 def run_tray():
+    if 'trayDataList' in session \
+        and len(session['trayDataList']) > 0 \
+        and len(session['trayDataList'][0]) > 0:
+        next_tray_id = session['trayDataList'][0][0]
+    else:
+        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+        next_tray_id = None
+
+    return render_template('picking_tray_ran.html', nextTrayId = next_tray_id)
+
+@app.route('/picking_rescan_tray')
+def picking_rescan_tray():
+    #Scan it
+    return render_template('picking_tray_ran.html')
+
+@app.route('/next_tray')
+def next_tray():
+    print("Next Tray")
+    trayDataList = session['trayDataList']
+    #if we're out of trayData, tell user tray is done
+    if len(trayDataList) == 0:
+        return render_template('done_with_file.html')
+
+    trayId, trayData, numRacks = trayDataList[0]
+
+    edgeLength = 25 if numRacks == 6 else 30
+    viewer = trayStatusViewer(edgeLength, numRacks, TUBES_ALONG_X, TUBES_ALONG_Y)
+    viewer.newTray(trayData)
+
+    #save image of tray in 'static/' to to be shown in run_tray
+    viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+
+    if (False): #If its done show that page
+        return render_template('order_complete.html')
+    return render_template('picking_scan_tray.html', nextTrayId = trayId)
+
+@app.route('/scanning_begin')
+def scanning_being():
+    #Begin it
+    return render_template('scanning_enter_ids.html')
+
+@app.route('/scanning_enter_ids')
+def scanning_enter_ids():
+    #Enter it
+    return render_template('scanning_check_ids.html')
+
+@app.route('/scan_tray')
+def scan_tray():
+    #Scan it
+    return render_template('scanning_tray_scanned.html')
+
+@app.route('/scanning_download_csv')
+def scanning_download_csv():
+    return send_file('output.csv', mimetype='text/csv',
+                     attachment_filename='output.csv', as_attachment=True)
+
+@app.route('/run_trayno') #This aint it
+def run_trayno():
     trayDataList = session.get('trayDataList', None)
     if trayDataList:
         #run the first tray and remove it
@@ -172,25 +232,6 @@ def run_tray():
 def check_tray():
     print("Checking Tray")
     return render_template('pick_tubes.html')
-
-@app.route('/next_tray')
-def next_tray():
-    print("Next Tray")
-    trayDataList = session['trayDataList']
-    #if we're out of trayData, tell user tray is done
-    if len(trayDataList) == 0:
-        return render_template('done_with_file.html')
-
-    trayId, trayData, numRacks = trayDataList[0]
-
-    edgeLength = 25 if numRacks == 6 else 30
-    viewer = trayStatusViewer(edgeLength, numRacks, TUBES_ALONG_X, TUBES_ALONG_Y)
-    viewer.newTray(trayData)
-
-    #save image of tray in 'static/' to to be shown in run_tray
-    viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
-
-    return render_template('pick_tubes.html', nextTrayId = trayId)
 
 if __name__ == '__main__':
     app.run(debug=True)#, host='0.0.0.0')
