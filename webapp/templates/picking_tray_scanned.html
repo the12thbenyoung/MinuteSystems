@@ -1,0 +1,26 @@
+<html>
+<body>
+<h1> 
+	{% if desTubesIncor  %}
+        Tray scanned, number of desired tubes incorrect: {{ desTubesIncor }}
+    {% endif %}
+    {% if totTubesIncor  %}
+        Total number of tubes incorrect: {{ totTubesIncor }}
+    {% endif %}
+</h1>
+<img src="../static/traylegend1.jpg" alt="">
+<img src="../static/traydisplay.jpg" alt="">
+<form action="/picking_scan_tray" method="get">
+  <input type="submit" value="Scan Again">
+</form>
+<form action="/skip_tray" method="get">
+  <input type="submit" value="Skip Tray">
+</form>
+<form action="/abort_order" method="get">
+  <input type="submit" value="Abort Order">
+</form>
+<form action="/run_tray" method="get">
+  <input type="submit" value="Run Tray">
+</form>
+</body>
+</html>

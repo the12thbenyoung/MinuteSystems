@@ -1,0 +1,17 @@
+<html>
+<body>
+<h1>
+	{% if runningErrors  %}
+        Tray ran, number of errors: {{ runningErrors }}
+    {% endif %}
+</h1>
+<img src="../static/traylegend2.jpg" alt="">
+<img src="../static/traydisplay.jpg" alt="">
+<form action="/picking_rescan_tray" method="get">
+  <input type="submit" value="Scan Again">
+</form>
+<form action="/next_tray" method="get">
+  <input type="submit" value="Next Tray">
+</form>
+</body>
+</html>

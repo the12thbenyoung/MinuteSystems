@@ -1,0 +1,34 @@
+<html>
+<body>
+<h1>Please check the ids to make sure they are correct</h1>
+<h1> 
+	{% if trayid  %}
+        Tray ID: {{ trayid }}
+    {% endif %}
+    {% if rackid0  %}
+        Rack 1 ID: {{ rackid0 }}
+    {% endif %}
+    {% if rackid1  %}
+        Rack 2 ID: {{ rackid1 }}
+    {% endif %}
+    {% if rackid2  %}
+        Rack 3 ID: {{ rackid2 }}
+    {% endif %}
+    {% if rackid3  %}
+        Rack 4 ID: {{ rackid3 }}
+    {% endif %}
+    {% if rackid4  %}
+        Rack 5 ID: {{ rackid4 }}
+    {% endif %}
+    {% if rackid5  %}
+        Rack 6 ID: {{ rackid5 }}
+    {% endif %}
+</h1>
+<form action="/scan_trays" method="get">
+  <input type="submit" value="Change IDs">
+</form>
+<form action="/scan_tray" method="get">
+  <input type="submit" value="Scan Tray">
+</form>
+</body>
+</html>
