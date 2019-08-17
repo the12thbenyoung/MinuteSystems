@@ -8,7 +8,8 @@ import pandas as pd
 from prod.trayStatusViewer import trayStatusViewer
 from numpy import unique
 import os
-
+from qr.dataMatrixDecoder import process_rack
+from multiprocessing import Pool, Process, Queue
 
 #CONSTANTS SECTION STARTS
 SESSION_TYPE = 'redis'
@@ -37,6 +38,31 @@ solenoidArray = SolenoidArray()
 def convertRow(rowLetter):
     alphabet = 'ABCDEFGH'
     return alphabet.index(rowLetter)
+
+def scan(numRacks):
+    process_list = []
+    data_queue = Queue()
+    
+    for i in range(numRacks):
+        motor.moveToRackForCamera(i)
+        imagePath = os.join.path(WORKING_DIRECTORY, f'camerapics/rack{i}.jpg')
+        camera.start_preview()
+        sleep(2)
+        camera.capture(imagePath)
+        camera.stop_preview()
+        proc = Process(target=process_rack, args=(imagePath,data_queue))
+    
+    for proc in process_list:
+        proc.join()
+    
+    #found_data_list = []
+    #while not data_queue.empty():
+    #    filename, dataIndices, tubeFound, matricesDecoded = data_queue.get()
+    #    found_data_list.append([filename, tubesFound, matricesDecoded])
+    
+    #To grab data at row,col do data_indices[hash((row,col))]
+    
+    return data_queue
 
 @app.after_request
 def add_header(response):
@@ -68,6 +94,9 @@ def allowed_file(filename):
 def get_csv_file():
     os.system('rm ' + os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
     os.system('rm ' + os.path.join(WORKING_DIRECTORY, 'static/images/*.jpg'))
+    
+    output = open(os.path.join(UPLOAD_FOLDER, 'output.csv'), "w+")
+    output.close()
 
     if 'file' not in request.files:
         flash('No file part')
@@ -116,18 +145,30 @@ def get_csv_file():
             if i == 0:
                 #only show first image in pick_tubes
                 viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+                
+        if 'trayDataList' in session \
+        and len(session['trayDataList']) > 0 \
+        and len(session['trayDataList'][0]) > 0:
+            next_tray_id = session['trayDataList'][0][0]
+        else:
+            print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+            next_tray_id = None
 
-    return render_template('picking_scan_tray.html')
+    return render_template('picking_scan_tray.html', nextTrayId = next_tray_id)
 
 @app.route('/picking_scan_tray')
 def picking_scan_tray():
     #Scan it
-    return render_template('picking_tray_scanned.html')
+    #Save traylegend1.jpg
+    desired_tubes_incorrect = 0;
+    total_tubes_incorrect = 0;
+    return render_template('picking_tray_scanned.html',
+                           desiredTubesIncorrect = desired_tubes_incorrect, totalTubesIncorrect = total_tubes_incorrect)
 
-@app.route('/abort_order')
-def abort_order():
-    #Abort it
-    return render_template('index.html')
+@app.route('/abort_order', methods=['GET', 'POST'])
+def download():
+    return send_file(os.path.join(UPLOAD_FOLDER, 'output.csv'), mimetype='text/csv',
+                     attachment_filename='output.csv', as_attachment=True)
 
 @app.route('/skip_tray')
 def skip_tray():
@@ -136,15 +177,43 @@ def skip_tray():
 
 @app.route('/run_tray')
 def run_tray():
-    if 'trayDataList' in session \
-        and len(session['trayDataList']) > 0 \
-        and len(session['trayDataList'][0]) > 0:
-        next_tray_id = session['trayDataList'][0][0]
-    else:
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        next_tray_id = None
+    trayDataList = session.get('trayDataList', None)
+    if trayDataList:
+        #run the first tray and remove it
+        tray, trayData, numRacks = trayDataList.pop(0)
 
-    return render_template('picking_tray_ran.html', nextTrayId = next_tray_id)
+        edgeLength = 25 if numRacks == 6 else 30
+        viewer = trayStatusViewer(edgeLength, numRacks, TUBES_ALONG_X, TUBES_ALONG_Y)
+        viewer.newTray(trayData)
+
+        trayDataPick = trayData[trayData['Pick'] == 1]
+        racks = unique(trayDataPick['RackPositionInTray'])
+        racks.sort()
+        for rackId in racks:
+            rackData = trayDataPick[trayDataPick['RackPositionInTray'] == rackId]
+            columns = unique(rackData['TubeColumn'])
+            columns.sort()
+            for col in columns:
+                #move to rack,column
+                motor.moveToTube(int(rackId), int(col))
+                colData = rackData[rackData['TubeColumn'] == col]
+                for row in colData['TubeRow']:
+                    print(tray, rackId, col, row)
+                    #activate soleniod
+                    solenoidArray.actuateSolenoid(int(row))
+                    viewer.pickTube(rackId, col, row)
+
+        #save image of tray in 'static/images/' to to be shown in file_uploaded.html
+        viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+
+        motor.returnHome()
+        motor.release()
+        
+        #set running_errors somewhere in here
+        running_errors = 0
+        #save traylegend2.jpg here
+
+    return render_template('picking_tray_ran.html', runningErrors = running_errors)
 
 @app.route('/picking_rescan_tray')
 def picking_rescan_tray():
@@ -189,42 +258,12 @@ def scan_tray():
 
 @app.route('/scanning_download_csv')
 def scanning_download_csv():
-    return send_file('output.csv', mimetype='text/csv',
+    return send_file(os.path.join(UPLOAD_FOLDER, 'output.csv'), mimetype='text/csv',
                      attachment_filename='output.csv', as_attachment=True)
 
 @app.route('/run_trayno') #This aint it
 def run_trayno():
-    trayDataList = session.get('trayDataList', None)
-    if trayDataList:
-        #run the first tray and remove it
-        tray, trayData, numRacks = trayDataList.pop(0)
-
-        edgeLength = 25 if numRacks == 6 else 30
-        viewer = trayStatusViewer(edgeLength, numRacks, TUBES_ALONG_X, TUBES_ALONG_Y)
-        viewer.newTray(trayData)
-
-        trayDataPick = trayData[trayData['Pick'] == 1]
-        racks = unique(trayDataPick['RackPositionInTray'])
-        racks.sort()
-        for rackId in racks:
-            rackData = trayDataPick[trayDataPick['RackPositionInTray'] == rackId]
-            columns = unique(rackData['TubeColumn'])
-            columns.sort()
-            for col in columns:
-                #move to rack,column
-                motor.moveToTube(int(rackId), int(col))
-                colData = rackData[rackData['TubeColumn'] == col]
-                for row in colData['TubeRow']:
-                    print(tray, rackId, col, row)
-                    #activate soleniod
-                    solenoidArray.actuateSolenoid(int(row))
-                    viewer.pickTube(rackId, col, row)
-
-        #save image of tray in 'static/images/' to to be shown in file_uploaded.html
-        viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
-
-        motor.returnHome()
-        motor.release()
+    
                 
     return render_template('next_tray.html')
 
