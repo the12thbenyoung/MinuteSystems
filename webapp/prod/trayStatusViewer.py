@@ -4,12 +4,23 @@ from PIL import Image, ImageDraw, ImageFont
 
 #tube statuses
 ABSENT = 0
+ABSENT_WRONG = 10
 PRESENT = 1
+PRESENT_WRONG = 11
 TARGET = 2
+TARGET_WRONG = 12
 PICKED = 3
+PICKED_WRONG = 13
+NOT_PICKED = 4
+
+WHITE = (255,255,255)
+BLACK = (0,0,0)
+RED = (255,0,0)
+YELLOW = (255,255,0)
+GREEN = (0,255,0)
 
 #font to use for index labels
-indexFont = ImageFont.truetype('COURIER.TTF', size=15)
+indexFont = ImageFont.truetype('COURIER.TTF', size=17)
 #bigger font to use for rack labels
 rackFont = ImageFont.truetype('COURIER.TTF', size=25)
 
@@ -20,61 +31,129 @@ class trayStatusViewer:
     #represents one tube - one square/circle displayed in the window
     class Tube:
 
-        def __init__(self, x, y, edgeLength, draw):
+        def __init__(self, x, y, edge_length, draw):
             self.x = x
             self.y = y
             self.status = ABSENT
             self.draw = draw
-            self.edgeLength = edgeLength
+            self.edge_length = edge_length
 
-            #draw empty rectangle and circle to represent tube
+            # draw empty rectangle and circle to represent tube
             draw.rectangle([(x, y), \
-                            (x + edgeLength, y + edgeLength)], \
+                            (x + edge_length, y + edge_length)], \
                            fill=(255,255,255), \
-                           outline=(0,0,0))
-            draw.ellipse([(x + edgeLength/10, y + edgeLength/10), \
-                          (x + edgeLength*9/10, y + edgeLength*9/10)], \
-                           fill=(255,255,255), \
-                           outline=(0,0,0))
+                           outline=BLACK, \
+                           width=1)
+            draw.ellipse([(x + edge_length/10, y + edge_length/10), \
+                          (x + edge_length*9/10, y + edge_length*9/10)], \
+                         fill=(255,255,255), \
+                         outline=BLACK, \
+                         width=1)
 
-        #draw the circle representing the tube filled with given color
-        #and black outline
-        def __colorTube(self, color):
-            self.draw.ellipse([(self.x + self.edgeLength/10, self.y + self.edgeLength/10), \
-                               (self.x + self.edgeLength*9/10, self.y + self.edgeLength*9/10)], \
-                              fill=color, \
-                              outline=(0,0,0))
+        def __color_tube(self, color, second_color = None):
+            """draw the circle representing the tube filled with given color(s)
+            and black outline
+            """
+            if second_color:
+                #split circle into 2 colors
+                self.draw.chord([(self.x + self.edge_length/10, self.y + self.edge_length/10), \
+                                 (self.x + self.edge_length*9/10, self.y + self.edge_length*9/10)], \
+                                90, #start at 6 (0 degrees is at 3 o'clock)
+                                270, #end at noon
+                                fill=color,\
+                                outline=BLACK, \
+                                width=1)
+                self.draw.chord([(self.x + self.edge_length/10, self.y + self.edge_length/10), \
+                                 (self.x + self.edge_length*9/10, self.y + self.edge_length*9/10)], \
+                                270, #start at noon 
+                                90, #end at 6 
+                                fill=second_color, \
+                                outline=BLACK, \
+                                width=1)
 
-        def showAsAbsent(self):
-            #color tube white
-            self.__colorTube((255,255,255))
+            else:
+                #draw full cicrle with one color
+                self.draw.ellipse([(self.x + self.edge_length/10, self.y + self.edge_length/10), \
+                                   (self.x + self.edge_length*9/10, self.y + self.edge_length*9/10)], \
+                                  fill=color, \
+                                  outline=BLACK, \
+                                  width=1)
+
+        def __color_tube_and_square(self, tube_color, square_color):
+            """Color background square one color and tube another. Used to show correctly/
+            incorrectly picked tubes
+            """
+            self.draw.rectangle([(self.x, self.y), \
+                                 (self.x + self.edge_length, self.y + self.edge_length)], \
+                                fill=square_color, \
+                                outline=BLACK, \
+                                width=1)
+            self.draw.ellipse([(self.x + self.edge_length/10, self.y + self.edge_length/10), \
+                               (self.x + self.edge_length*9/10, self.y + self.edge_length*9/10)], \
+                              fill=tube_color, \
+                              outline=BLACK, \
+                              width=1)
+
+
+        def show_as_absent(self):
+            self.__color_tube(WHITE)
             self.status = ABSENT
 
-        def showAsPresent(self):
-            #color tube black
-            self.__colorTube((0,0,0))
+        def show_as_absent_wrong(self):
+            """file says tube should be absent, but it's present
+            """
+            self.__color_tube(WHITE,RED)
+            self.status = ABSENT_WRONG
+
+        def show_as_present(self):
+            self.__color_tube(BLACK)
             self.status = PRESENT
 
-        def showAsTarget(self):
-            #color tube red
-            self.__colorTube((255,0,0))
+        def show_as_present_wrong(self):
+            """file says tube should be present, but it's absent
+            """
+            self.__color_tube(BLACK,RED)
+            self.status = PRESENT_WRONG
+
+        def show_as_target(self):
+            self.__color_tube(YELLOW)
             self.status = TARGET
 
-        def showAsPicked(self):
-            #color tube green
-            self.__colorTube((52, 217, 90))
+        def show_as_target_wrong(self):
+            """file says tube should be target (and thus also present), but it's absent
+            """
+            #show as half yellow, half red
+            self.__color_tube(YELLOW,RED)
+            self.status = TARGET_WRONG
+
+        def show_as_picked(self):
+            self.__color_tube_and_square(WHITE,GREEN)
             self.status = PICKED
 
-        def getStatus(self):
+        def show_as_picked_wrong(self):
+            """Tube was picked, but should not have been
+            """
+            #white with red outline
+            self.__color_tube_and_square(WHITE,RED)
+            self.status = PICKED_WRONG
+
+        def show_as_not_picked(self):
+            """Tube was not picked, but should have been
+            """
+            #black with red outline
+            self.__color_tube_and_square(BLACK,RED)
+            self.status = NOT_PICKED
+
+        def get_status(self):
             return self.status
 
-    def __init__(self, edgeLength, numRacks, tubesAlongX, tubesAlongY):
-        self.EDGE_LENGTH = edgeLength
-        self.NUM_RACKS = numRacks
-        self.TUBES_ALONG_X = tubesAlongX
-        self.TUBES_ALONG_Y = tubesAlongY
+    def __init__(self, edge_length, num_racks, tubes_along_x, tubes_along_y):
+        self.EDGE_LENGTH = edge_length
+        self.NUM_RACKS = num_racks
+        self.TUBES_ALONG_X = tubes_along_x
+        self.TUBES_ALONG_Y = tubes_along_y
 
-        windowX = self.EDGE_LENGTH*(self.NUM_RACKS*(self.TUBES_ALONG_X+1)-1)
+        windowX = self.EDGE_LENGTH*(self.NUM_RACKS*(self.TUBES_ALONG_X+1))
         windowY = self.EDGE_LENGTH*(self.TUBES_ALONG_Y+3)
         #image that represents the whole tray
         self.win = Image.new(mode='RGB', size=(windowX,windowY), color=(255,255,255))
@@ -89,7 +168,7 @@ class trayStatusViewer:
             for x in range(self.TUBES_ALONG_X):
                 y_list = []
                 for y in range(self.TUBES_ALONG_Y):
-                    x_coor = self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + x)
+                    x_coor = self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + x + 1)
                     #lower indices are on the bottom (higher y coor), so start at 
                     #bottom and subtract to move up as y index increases
                     y_coor = self.EDGE_LENGTH*(self.TUBES_ALONG_Y-y)
@@ -99,29 +178,24 @@ class trayStatusViewer:
         self.tubes = tubes
 
         #draw column indices between each pair of trays
-        for rack in range(1, self.NUM_RACKS):
-            x_coor = int(np.round(self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1)-0.85)))
+        for rack in range(self.NUM_RACKS):
+            x_coor = int(np.round(self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1)+0.2)))
             single_digit_x_coor = x_coor + int(np.round(self.EDGE_LENGTH*0.18))
             for row in range(self.TUBES_ALONG_Y):
                 #if row is a singe digit, shift the text a bit to the right
                 mod_x_coor = single_digit_x_coor if self.TUBES_ALONG_Y-row < 10 else x_coor
-                y_coor = int(np.round(self.EDGE_LENGTH*(row + 1.27)))
+                y_coor = int(np.round(self.EDGE_LENGTH*(row + 1.35)))
                 self.draw.text((mod_x_coor,y_coor),
                                text = str(self.TUBES_ALONG_Y-row),
                                font = indexFont,
                                fill = (0,0,0))
 
-        #draw row indices above and below each rack
+        #draw row indices above each rack
         bottom_y_coor = self.EDGE_LENGTH*(self.TUBES_ALONG_Y+1.2)
-        top_y_coor = self.EDGE_LENGTH*0.45
         for rack in range(self.NUM_RACKS):
             for col in range(self.TUBES_ALONG_X):
-                x_coor = self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + col + 0.32)
+                x_coor = self.EDGE_LENGTH*(rack*(self.TUBES_ALONG_X+1) + col + 1.42)
                 self.draw.text((x_coor, bottom_y_coor),
-                               text = alphabet[col],
-                               font = indexFont,
-                               fill=(0,0,0))
-                self.draw.text((x_coor, top_y_coor),
                                text = alphabet[col],
                                font = indexFont,
                                fill=(0,0,0))
@@ -129,21 +203,19 @@ class trayStatusViewer:
         #draw rack numbers beneath racks
         y_coor = self.EDGE_LENGTH*(self.TUBES_ALONG_Y+2)
         for rack in range(self.NUM_RACKS):
-            x_coor = self.EDGE_LENGTH*((self.TUBES_ALONG_X+1)*(rack + 0.5)-0.75)
+            x_coor = self.EDGE_LENGTH*((self.TUBES_ALONG_X+1)*(rack + 0.5)+0.25)
             self.draw.text((x_coor, y_coor),
                            text = str(rack+1),
                            font = rackFont,
                            fill=(0,0,0))
 
-    
-
     #determine which tubes start as ABSENT, PRESENT, or TARGET and color accordingly
-    def newTray(self, locationData):
+    def new_tray(self, locationData):
         #reset all tubes to ABSENT
         for rack in self.tubes:
             for col in rack:
                 for tube in col:
-                    tube.showAsAbsent()
+                    tube.show_as_absent()
 
         for _, row in locationData.iterrows():
             (x,y) = int(row['TubeColumn']), int(row['TubeRow'])
@@ -158,9 +230,9 @@ class trayStatusViewer:
                 and pd.notnull(toPick):
 
                 if int(toPick) == 1:
-                    self.tubes[rack][x][y].showAsTarget()
+                    self.tubes[rack][x][y].show_as_target()
                 else:
-                    self.tubes[rack][x][y].showAsPresent()
+                    self.tubes[rack][x][y].show_as_present()
 
     def pickTube(self, rack, x, y):
         if all([0 <= m and m < bound \
@@ -169,22 +241,28 @@ class trayStatusViewer:
                                      self.TUBES_ALONG_X, \
                                      self.TUBES_ALONG_Y])]):
             target = self.tubes[rack][x][y]
-            if target.getStatus() == TARGET:
-                target.showAsPicked()
-            elif target.getStatus() == ABSENT:
+            if target.get_status() == TARGET:
+                target.show_as_picked()
+            elif target.get_status() == ABSENT:
                 print("Tube is not in rack!")
-            elif target.getStatus() == PRESENT:
+            elif target.get_status() == PRESENT:
                 print("Tube was not supposed to be picked!")
-            elif target.getStatus() == PICKED:
+            elif target.get_status() == PICKED:
                 print("Tube has already been picked!")
         else:
             print("Tube out of bounds!")
 
-    #write the tube image to output file
-    def saveImage(self, filename):
+    def get_tube(self, rack, x, y):
+        """get reference to tube in rack rack at index x,y
+        """
+        return self.tubes[rack][x][y]
+
+    def save_image(self, filename):
+        """write the tube image to output file
+        """
         self.win.save(filename, 'JPEG')
 
-    def showImage(self):
+    def show_tray(self):
         self.win.show()
 
 if __name__ == '__main__':
@@ -193,21 +271,35 @@ if __name__ == '__main__':
     TUBES_ALONG_X = 8
     TUBES_ALONG_Y = 12
 
-    #edgeLength, numRacks, tubesAlongX, tubesAlongY
+    #edge_length, num_racks, tubes_along_x, tubes_along_y
     viewer = trayStatusViewer(EDGE_LENGTH, NUM_RACKS, TUBES_ALONG_X, TUBES_ALONG_Y)
 
-    #generate random present/absent sample input
-    writeInput(300, NUM_RACKS, TUBES_ALONG_X, TUBES_ALONG_Y, 'present_input.csv')
-    writeInput(50, NUM_RACKS, TUBES_ALONG_X, TUBES_ALONG_Y, 'target_input.csv')
+    ##generate random present/absent sample input
+    #writeInput(300, NUM_RACKS, TUBES_ALONG_X, TUBES_ALONG_Y, 'present_input.csv')
+    #writeInput(50, NUM_RACKS, TUBES_ALONG_X, TUBES_ALONG_Y, 'target_input.csv')
+    test_input = pd.DataFrame({'TubeColumn': [3,1,2,4,4], \
+                               'TubeRow': [7,4,2,6,10], \
+                               'RackPositionInTray': [2,3,0,1,4],
+                               'Pick': [0,0,1,1,0]})
 
-    viewer.newTray('present_input.csv', 'target_input.csv')
-    viewer.showImage()
+    viewer.new_tray(test_input)
+    # viewer.show_tray()
+    viewer.get_tube(0,0,0).show_as_absent()
+    viewer.get_tube(0,0,1).show_as_absent_wrong()
+    viewer.get_tube(0,0,2).show_as_present()
+    viewer.get_tube(0,0,3).show_as_present_wrong()
+    viewer.get_tube(0,0,4).show_as_target()
+    viewer.get_tube(0,0,5).show_as_target_wrong()
+    viewer.get_tube(0,0,6).show_as_picked()
+    viewer.get_tube(0,0,7).show_as_picked_wrong()
+    viewer.get_tube(0,0,8).show_as_not_picked()
 
-    target = input('Enter coordinates <rack>,<x>,<y>: ')
-    while target and ',' in target:
-        rack, x, y = target.split(',')
-        viewer.pickTube(int(rack)-1, x, TUBES_ALONG_Y - int(y))
-        viewer.showImage()
-        target = input('Enter coordinates <rack>,<x>,<y>: ')
+    viewer.show_tray()
+    # target = input('Enter coordinates <rack>,<x>,<y>: ')
+    # while target and ',' in target:
+    #     rack, x, y = target.split(',')
+    #     viewer.pickTube(int(rack)-1, x, TUBES_ALONG_Y - int(y))
+    #     viewer.show_tray()
+    #     target = input('Enter coordinates <rack>,<x>,<y>: ')
 
-    viewer.saveImage('tray.png')
+    # viewer.save_image('tray.png')
