@@ -1,0 +1,16 @@
+Bens shite
+
+I reorganized the html files. The ones for picking are now in a folder and so are the ones for scanning.
+
+The scan function is almost the same. I just added lines to tell the motors to return home and release.
+
+Not sure how we should do the csv file, you would probably know how to do that better than me.
+
+The functions you need to mess with are:
+	scan (maybe)
+	nextTray (maybe)
+	get_csv_file (maybe) this one should be finished
+	picking_scan_tray
+	run_tray
+	picking_rescan_tray
+	scan_tray (This is the one for the scanning not picking side)

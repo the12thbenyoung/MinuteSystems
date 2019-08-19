@@ -87,7 +87,7 @@ def make_scan_pick_guide():
                    fill = BLACK)
 
     win.show()
-    win.save('just_scan_guide.jpg', 'JPEG')
+    win.save('just_scan_pick_guide.jpg', 'JPEG')
 
 def make_scan_guide():
     """Make guide with just the 4 non-target split-tubes

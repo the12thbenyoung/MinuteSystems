@@ -39,6 +39,8 @@ def convertRow(rowLetter):
     alphabet = 'ABCDEFGH'
     return alphabet.index(rowLetter)
 
+#This method scans a tray
+#It needs to be told how many rack there are in a tray
 def scan(numRacks):
     process_list = []
     data_queue = Queue()
@@ -51,6 +53,9 @@ def scan(numRacks):
         camera.capture(imagePath)
         camera.stop_preview()
         proc = Process(target=process_rack, args=(imagePath,data_queue))
+        
+    motor.returnHome()
+    motor.release()
     
     for proc in process_list:
         proc.join()
@@ -84,7 +89,7 @@ def index():
 
 @app.route('/picking_begin')
 def picking_begin():
-    return render_template('upload_file.html')
+    return render_template('picking/upload_file.html')
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -145,6 +150,7 @@ def get_csv_file():
             if i == 0:
                 #only show first image in pick_tubes
                 viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+                numRacks = self.globalNumRacks
                 
         if 'trayDataList' in session \
         and len(session['trayDataList']) > 0 \
@@ -154,15 +160,23 @@ def get_csv_file():
             print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
             next_tray_id = None
 
-    return render_template('picking_scan_tray.html', nextTrayId = next_tray_id)
+    return render_template('picking/scan_tray.html', nextTrayId = next_tray_id)
 
+#This is run after the user presses Scan Tray on scan_tray.html
+#Or after the user presses Scan Again on tray_scanned.html
+#This is the first scan. It is done before the user runs the tray
 @app.route('/picking_scan_tray')
 def picking_scan_tray():
-    #Scan it
-    #Save traylegend1.jpg
+    #The tray is scanned and the info is returned into data_queue
+    data_queue = scan() #gotta grab numRacks here somehow
+    
+    #You need to make the tray image (save it to the normal spot, static/traydisplay.jpg)
+    #and set desired_tubes_incorrect and total_tubes_correct
+    #this might be run multiple times so it needs to be able to handle that
+    
     desired_tubes_incorrect = 0;
     total_tubes_incorrect = 0;
-    return render_template('picking_tray_scanned.html',
+    return render_template('picking/tray_scanned.html',
                            desiredTubesIncorrect = desired_tubes_incorrect, totalTubesIncorrect = total_tubes_incorrect)
 
 @app.route('/abort_order', methods=['GET', 'POST'])
@@ -173,8 +187,10 @@ def download():
 @app.route('/skip_tray')
 def skip_tray():
     #Skip it
-    return render_template('picking_scan_tray.html')
+    return render_template('picking/scan_tray.html')
 
+#This is run after the user presses Run Tray on tray_scanned.html'
+#This does the second scan which is done after the tray is ran
 @app.route('/run_tray')
 def run_tray():
     trayDataList = session.get('trayDataList', None)
@@ -209,16 +225,26 @@ def run_tray():
         motor.returnHome()
         motor.release()
         
-        #set running_errors somewhere in here
+        #This is where we scan the tray
+        data_queue = scan() #gotta grab numRacks here somehow
+        
+        #You need to make the tray image (save it to the normal spot, static/traydisplay.jpg)
+        #and set running_errors somewhere in here
         running_errors = 0
-        #save traylegend2.jpg here
 
-    return render_template('picking_tray_ran.html', runningErrors = running_errors)
+    return render_template('picking/tray_ran.html', runningErrors = running_errors)
 
+#This is run after the user presses Scan Again on tray_ran.html
 @app.route('/picking_rescan_tray')
 def picking_rescan_tray():
     #Scan it
-    return render_template('picking_tray_ran.html')
+    data_queue = scan() #gotta grab numRacks here somehow
+    
+    #You need to make the tray image (save it to the normal spot, static/traydisplay.jpg)
+    #and set running_errors somewhere in here
+    running_errors = 0
+    
+    return render_template('picking/tray_ran.html', runningErrors = running_errors)
 
 @app.route('/next_tray')
 def next_tray():
@@ -226,7 +252,7 @@ def next_tray():
     trayDataList = session['trayDataList']
     #if we're out of trayData, tell user tray is done
     if len(trayDataList) == 0:
-        return render_template('done_with_file.html')
+        return render_template('picking/order_complete.html')
 
     trayId, trayData, numRacks = trayDataList[0]
 
@@ -237,40 +263,44 @@ def next_tray():
     #save image of tray in 'static/' to to be shown in run_tray
     viewer.saveImage(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
 
-    if (False): #If its done show that page
-        return render_template('order_complete.html')
-    return render_template('picking_scan_tray.html', nextTrayId = trayId)
+    return render_template('picking/scan_tray.html', nextTrayId = trayId)
 
 @app.route('/scanning_begin')
 def scanning_being():
     #Begin it
-    return render_template('scanning_enter_ids.html')
+    return render_template('scanning/enter_ids.html')
 
-@app.route('/scanning_enter_ids')
+@app.route('/scanning_enter_ids', methods=['POST']))
 def scanning_enter_ids():
     #Enter it
-    return render_template('scanning_check_ids.html')
+    trayId = request.form['trayid']
+    rackId0 = request.form['rackid0']
+    rackId1 = request.form['rackid1']
+    rackId2 = request.form['rackid2']
+    rackId3 = request.form['rackid3']
+    rackId4 = request.form['rackid4']
+    rackId5 = request.form['rackid5']
+    
+    return render_template('scanning/check_ids.html', trayId = trayid, rackId0 = rackid0, rackId1 = rackid1, \
+                           rackId2 = rackid2, rackId3 = rackid3, rackId4 = rackid4, rackId5 = rackid5)
 
+#This is run after the user presses Scan Tray on check_ids.html
+#Or after the user presses Rescan Tray on tray_scanned.html
 @app.route('/scan_tray')
 def scan_tray():
-    #Scan it
-    return render_template('scanning_tray_scanned.html')
+    #you'll need to grab the trayId and rackId variables from the previous function somehow
+    #Then scan it
+    data_queue = scan()
+    #And then process this data into /static/traydisplay.jpg so it can be displayed
+    #Also we need to put the data into a csv file so it can be downloaded
+    #This function might be ran multiple times for the same tray
+    
+    return render_template('scanning/tray_scanned.html')
 
 @app.route('/scanning_download_csv')
 def scanning_download_csv():
     return send_file(os.path.join(UPLOAD_FOLDER, 'output.csv'), mimetype='text/csv',
                      attachment_filename='output.csv', as_attachment=True)
-
-@app.route('/run_trayno') #This aint it
-def run_trayno():
-    
-                
-    return render_template('next_tray.html')
-
-@app.route('/check_tray')
-def check_tray():
-    print("Checking Tray")
-    return render_template('pick_tubes.html')
 
 if __name__ == '__main__':
     app.run(debug=True)#, host='0.0.0.0')
