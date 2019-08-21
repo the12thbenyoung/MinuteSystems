@@ -54,6 +54,13 @@ class trayStatusViewer:
             """draw the circle representing the tube filled with given color(s)
             and black outline
             """
+            #always reset background square to white
+            self.draw.rectangle([(self.x, self.y), \
+                                 (self.x + self.edge_length, self.y + self.edge_length)], \
+                                fill=WHITE, \
+                                outline=BLACK, \
+                                width=1)
+
             if second_color:
                 #split circle into 2 colors
                 self.draw.chord([(self.x + self.edge_length/10, self.y + self.edge_length/10), \
@@ -234,7 +241,7 @@ class trayStatusViewer:
                 else:
                     self.tubes[rack][x][y].show_as_present()
 
-    def pickTube(self, rack, x, y):
+    def pick_tube(self, rack, x, y):
         if all([0 <= m and m < bound \
                 for m, bound in zip([rack, x, y], \
                                     [self.NUM_RACKS, \
@@ -264,6 +271,114 @@ class trayStatusViewer:
 
     def show_tray(self):
         self.win.show()
+
+    def make_pre_run_scan_results(self, scan_data_queue, file_data, num_racks, output_file):
+        """given the results of the camera scan of a tray (as output by the scan() method
+        in app.py) and the expected tube locations from the file, make an image 
+        showing the difference between the inputs
+        """
+        #turn scan_data queue into dict with racks as keys
+        scan_data_by_rack = {}
+        while not scan_data_queue.empty():
+            rack_id, _, rack_data, _, _ = scan_data_queue.get() 
+            scan_data_by_rack[rack_id] = rack_data
+
+        #turn file_data dataframe into a dict by rack,col,row as we will be looking up 
+        #individual tubes frequently, since we're looping thru all wells instead of 
+        #just the wells listed in file_data
+        file_data_dict = {}
+        for data in file_data[['RackPositionInTray', 'SampleBarcode', 'Pick', 'TubeColumn', 'TubeRow']].itertuples(index=False):
+            file_data_dict[hash((data.RackPositionInTray,data.TubeColumn,data.TubeRow))] = {'barcode': data.SampleBarcode, 'pick': data.Pick}
+
+        desired_tubes_incorrect = 0;
+        total_tubes_incorrect = 0;
+
+        #file_data might not have every tube in every rack, so iterate through all of them
+        for rack in range(num_racks):
+            for col in range(self.TUBES_ALONG_X):
+                for row in range(self.TUBES_ALONG_Y):
+                    this_tube = self.get_tube(rack,col,row)
+                    file_barcode = file_data_dict.get(hash((rack,col,row)),{}).get('barcode')
+                    file_pick = file_data_dict.get(hash((rack,col,row)),{}).get('pick')
+                    scan_barcode = scan_data_by_rack.get(rack,{}).get(hash((col,row)))
+                    print(file_barcode, scan_barcode, file_pick)
+
+                    #tube is absent in both file and scan
+                    if not scan_barcode and (not file_barcode or pd.isna(file_barcode)):
+                        this_tube.show_as_absent()
+                    #tube is absent in file and present in scan 
+                    elif scan_barcode and (not file_barcode or pd.isna(file_barcode)):
+                        total_tubes_incorrect += 1
+                        this_tube.show_as_absent_wrong()
+                    #tube has same barcode in file and scan and is pick target
+                    elif scan_barcode == file_barcode and file_pick == 1.0:
+                        this_tube.show_as_target()
+                    #same as above but tube isn't pick target
+                    elif scan_barcode == file_barcode:
+                        this_tube.show_as_present()
+                    #tube present in file, either missing or different in scan and is pick target
+                    elif file_barcode and scan_barcode != file_barcode and file_pick == 1.0:
+                        total_tubes_incorrect += 1
+                        desired_tubes_incorrect += 1
+                        this_tube.show_as_target_wrong()
+                    #same as above but tube isn't pick target
+                    elif file_barcode and scan_barcode != file_barcode:
+                        total_tubes_incorrect += 1
+                        this_tube.show_as_present_wrong()
+
+        self.save_image(output_file)
+        return scan_data_by_rack, desired_tubes_incorrect, total_tubes_incorrect
+
+    def make_post_run_scan_results(self, scan_data_queue, targeted_data, prev_scan_data, num_racks, output_file):
+        """given the results of the camera scan of a tray (as output by the scan() method
+        in app.py), a dataframe with the tubes that should have been picked, and a dict
+        with the results of the scan done before the tray was ran, and make an image 
+        showing the difference between the inputs
+        """
+        running_errors = 0
+        #turn scan_data queue into dict with racks as keys
+        scan_data_by_rack = {}
+        while not scan_data_queue.empty():
+            rack_id, _, rack_data, _, _ = scan_data_queue.get() 
+            scan_data_by_rack[rack_id] = rack_data
+
+        #go thru targeted_data to see whether supposedly picked tubes were actually picked and
+        #add targeted tubes to set so we can easily avoid them when searching for incorrectly picked tubes
+        targeted_tubes_set = set()
+        for data in targeted_data[['RackPositionInTray', 'SampleBarcode', 'TubeColumn', 'TubeRow']].itertuples(index=False):
+            rack = data.RackPositionInTray
+            col = data.TubeColumn
+            row = data.TubeRow
+            this_tube = self.get_tube(rack,col,row)
+            #if tube is still there, it didn't get picked
+            if scan_data_by_rack[rack].get(hash((col,row))):
+                running_errors += 1
+                this_tube.show_as_not_picked()
+            #if tube was there in previous scan and now isn't, it was picked
+            elif prev_scan_data[rack].get(hash((col,row))):
+                this_tube.show_as_picked()
+            #otherwise tube wasn't there in the first place
+            else:
+                running_errors += 1
+                this_tube.show_as_target_wrong()
+
+            targeted_tubes_set.add(hash((rack,col,row)))
+
+        #check all tubes for ones that were wrongly picked
+        for rack in range(num_racks):
+            for col in range(self.TUBES_ALONG_X):
+                for row in range(self.TUBES_ALONG_Y):
+                    #if tube was a target, it can't have been incorrectly picked (it was supposed to be)
+                    if hash((rack,col,row)) not in targeted_tubes_set:
+                        old_barcode = prev_scan_data.get(rack,{}).get(hash((col,row)))
+                        new_barcode = scan_data_by_rack.get(rack,{}).get(hash((col,row)))
+                        if old_barcode and not new_barcode:
+                            running_errors += 1
+                            self.get_tube(rack,col,row).show_as_picked_wrong()
+
+        self.save_image(output_file)
+        return running_errors
+
 
 if __name__ == '__main__':
     NUM_RACKS = 5
@@ -298,7 +413,7 @@ if __name__ == '__main__':
     # target = input('Enter coordinates <rack>,<x>,<y>: ')
     # while target and ',' in target:
     #     rack, x, y = target.split(',')
-    #     viewer.pickTube(int(rack)-1, x, TUBES_ALONG_Y - int(y))
+    #     viewer.pick_tube(int(rack)-1, x, TUBES_ALONG_Y - int(y))
     #     viewer.show_tray()
     #     target = input('Enter coordinates <rack>,<x>,<y>: ')
 

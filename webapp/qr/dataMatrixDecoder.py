@@ -316,11 +316,11 @@ def get_data_indices(data_locations, img=None):
     for data_loc in data_locations:
         row = np.argmin([abs(data_loc['y'] - row_coor) for row_coor in ROW_COORDINATES])
         col = np.argmin([abs(data_loc['x'] - col_coor) for col_coor in COLUMN_COORDINATES])
-        data_indices[hash((row,col))] = data_loc['data']
+        data_indices[hash((col,row))] = data_loc['data']
 
     return data_indices
 
-def process_rack(filename, data_queue = None):
+def process_rack(rack_num, filename, data_queue = None):
     badcount = 0
     tubes_found, matrices_decoded = 0,0
 
@@ -424,7 +424,7 @@ def process_rack(filename, data_queue = None):
     #if we're passed a queue, this is being called by a (multi)process, so add to queue
     #with key filename so parent process can tell which image generated the data
     if data_queue:
-        data_queue.put((filename, data_indices, tubes_found, matrices_decoded))
+        data_queue.put((rack_num, filename, data_indices, tubes_found, matrices_decoded))
         return None, None, None
     else:
         return data_indices, tubes_found, matrices_decoded
@@ -434,6 +434,3 @@ if __name__ == '__main__':
     print(data_locations)
     print(f'tubes found: {tubes_found}')
     print(f'decoded: {matrices_decoded}')
-
-
-
