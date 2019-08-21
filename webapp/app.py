@@ -308,23 +308,28 @@ def scanning_being():
 def scanning_enter_ids():
     #Enter it
     tray_id = request.form['trayid']
-    rackId0 = request.form['rackid0']
-    rackId1 = request.form['rackid1']
-    rackId2 = request.form['rackid2']
-    rackId3 = request.form['rackid3']
-    rackId4 = request.form['rackid4']
-    rackId5 = request.form['rackid5']
+    rack_id0 = request.form['rackid0']
+    rack_id1 = request.form['rackid1']
+    rack_id2 = request.form['rackid2']
+    rack_id3 = request.form['rackid3']
+    rack_id4 = request.form['rackid4']
+    rack_id5 = request.form['rackid5']
     
-    return render_template('scanning/check_ids.html', tray_id = trayid, rackId0 = rackid0, rackId1 = rackid1, \
-                           rackId2 = rackid2, rackId3 = rackid3, rackId4 = rackid4, rackId5 = rackid5)
+    return render_template('scanning/check_ids.html', trayid = tray_id, rackId0 = rack_id0, rackId1 = rack_id1, \
+                           rackId2 = rack_id2, rackId3 = rack_id3, rackId4 = rack_id4, rackId5 = rack_id5)
 
 #This is run after the user presses Scan Tray on check_ids.html
 #Or after the user presses Rescan Tray on tray_scanned.html
-@app.route('/scan_tray')
+@app.route('/scan_tray', methods=['GET'])
 def scan_tray():
     #you'll need to grab the tray_id and rackId variables from the previous function somehow
-    #Then scan it
-    data_queue = scan(session['num_racks'])
+    tray_id = request.args.get('tray_id')
+    rack_ids = [request.args.get(f'rackId{i}') for i in range(5)]
+    print(rack_ids)
+
+    num_racks = 5 if not rack_ids[-1] else 6
+
+    # scan_data_queue = scan(num_racks)
     #And then process this data into /static/traydisplay.jpg so it can be displayed
     #Also we need to put the data into a csv file so it can be downloaded
     #This function might be ran multiple times for the same tray

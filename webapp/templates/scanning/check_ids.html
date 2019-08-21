@@ -1,29 +1,41 @@
 <html>
 <body>
 <h1>Please check the ids to make sure they are correct</h1>
-<h1> 
+<h3> 
     {% if trayid  %}
         Tray ID: {{ trayid }}
     {% endif %}
-    {% if rackid0  %}
-        Rack 1 ID: {{ rackid0 }}
+</h3>
+<h3>
+    {% if rackid0 != None %}
+        Rack 1 ID: {{ rackId0 }}
     {% endif %}
-    {% if rackid1  %}
-        Rack 2 ID: {{ rackid1 }}
+</h3>
+<h3>
+    {% if rackid1 != None %}
+        Rack 2 ID: {{ rackId1 }}
     {% endif %}
-    {% if rackid2  %}
-        Rack 3 ID: {{ rackid2 }}
+</h3>
+<h3>
+    {% if rackid2 != None %}
+        Rack 3 ID: {{ rackId2 }}
     {% endif %}
-    {% if rackid3  %}
-        Rack 4 ID: {{ rackid3 }}
+</h3>
+<h3>
+    {% if rackid3 != None %}
+        Rack 4 ID: {{ rackId3 }}
     {% endif %}
-    {% if rackid4  %}
-        Rack 5 ID: {{ rackid4 }}
+</h3>
+<h3>
+    {% if rackid4 != None %}
+        Rack 5 ID: {{ rackId4 }}
     {% endif %}
-    {% if rackid5  %}
-        Rack 6 ID: {{ rackid5 }}
+</h3>
+<h3>
+    {% if rackid5 != None %}
+        Rack 6 ID: {{ rackId5 }}
     {% endif %}
-</h1>
+</h3>
 <form action="/scanning_begin" method="get">
   <input type="submit" value="Change IDs">
 </form>
