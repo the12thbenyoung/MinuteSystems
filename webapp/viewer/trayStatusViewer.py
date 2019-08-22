@@ -382,24 +382,34 @@ class trayStatusViewer:
         self.save_image(output_file)
         return running_errors
 
-    def make_just_scan_results(self, scan_data_queue, output_file):
+    def make_just_scan_results(self, scan_data_queue, trayId, rack_ids, img_output_file, csv_output_file):
         """When user is just scanning a tray to create an output file, without running.
         No file input, so just take data from scan and create a simple visual showing
-        just whether tubes are present or absent.
+        just whether tubes are present or absent and a corresponding output csv
         Assume the viewer was initialized with all tubes showing absent
         """
+        ALPHABET='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        output_df = pd.DataFrame([],columns=['TrayID','RackID','RackPositionInTray','WellID','SampleBarcode'])
         while not scan_data_queue.empty():
-            rack, _, rack_data, _, _ = scan_data_queue.get() 
+            rack_index, _, rack_data, _, _ = scan_data_queue.get() 
             #each rack's data is stored as a dict with hashed (col,row) keys that we can't unhash,
             #so have to loop thru every well and check if it had data returned for it
             for col in range(self.TUBES_ALONG_X):
                 for row in range(self.TUBES_ALONG_Y):
-                    if hash((col,row)) in rack_data:
-                        print(col,row)
-                        self.get_tube(rack,col,row).show_as_present()
+                    tube_barcode = rack_data.get(hash((col,row)))
+                    if tube_barcode:
+                        self.get_tube(rack_index,col,row).show_as_present()
 
-            self.save_image(output_file)
+                    #add row to csv output
+                    output_row = {'TrayID': trayId, \
+                                  'RackID': rack_ids[rack_index], \
+                                  'RackPositionInTray': rack_index, \
+                                  'WellID': ALPHABET[col] + str(row+1), \
+                                  'SampleBarcode': tube_barcode}
+                    output_df = output_df.append(output_row, ignore_index = True)
 
+        self.save_image(img_output_file)
+        output_df.to_csv(csv_output_file, index=False)
 
 if __name__ == '__main__':
     NUM_RACKS = 5

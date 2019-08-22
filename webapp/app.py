@@ -326,16 +326,18 @@ def scan_tray(trayId=None,rackId0=None,rackId1=None,rackId2=None,rackId3=None,ra
     num_racks = 6 if rackId5 else 5
     edge_length = 25 if num_racks == 6 else 30
 
+    rack_ids = [id for id in [rackId0,rackId1,rackId2,rackId3,rackId4,rackId5] if id]
+
     scan_data_queue = scan(num_racks)
-    #And then process this data into /static/traydisplay.jpg so it can be displayed
-    #Also we need to put the data into a csv file so it can be downloaded
-    #This function might be ran multiple times for the same tray
-    
+
     viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
     viewer.new_tray()
-    viewer.make_just_scan_results(scan_data_queue, os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
-    
-    # return render_template('scanning/scanning_tray_scanned.html')
+    viewer.make_just_scan_results(scan_data_queue, \
+                                  trayId, \
+                                  rack_ids, \
+                                  os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'),\
+                                  os.path.join(UPLOAD_FOLDER, 'output.csv'))\
+
     return render_template('scanning/scanning_tray_scanned.html')
 
 @app.route('/scanning_download_csv')
