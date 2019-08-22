@@ -8,8 +8,9 @@ import pandas as pd
 from viewer.trayStatusViewer import trayStatusViewer
 from numpy import unique
 import os
-from qr.dataMatrixDecoder import process_rack
-from multiprocessing import Pool, Process, Queue
+# from picamera import PiCamera
+# from qr.dataMatrixDecoder import process_rack
+# from multiprocessing import Pool, Process, Queue
 
 #CONSTANTS SECTION STARTS
 SESSION_TYPE = 'redis'
@@ -34,6 +35,8 @@ motor = Motor()
 
 solenoidArray = SolenoidArray()
 
+#camera = PiCamera()
+
 #convert 'B08' style input from file to (x,y) index tuple - (1,7)
 def convertRow(rowLetter):
     alphabet = 'ABCDEFGH'
@@ -47,27 +50,27 @@ def scan(num_racks):
     (rack number, filename, data: {hash((col,row)): tube number}, number of tubes located, number of tubes located)
     """
     process_list = []
-    data_queue = Queue()
+    #data_queue = Queue()
     
     for i in range(num_racks):
         motor.moveToRackForCamera(i)
 
         imagePath = 'qr/shpongus.jpg'
         imagePath = os.path.join(WORKING_DIRECTORY, f'camerapics/rack{i}.jpg')
-        camera.start_preview()
-        sleep(2)
-        camera.capture(imagePath)
-        camera.stop_preview()
+        #camera.start_preview()
+        #sleep(2)
+        #camera.capture(imagePath)
+        #camera.stop_preview()
 
-        proc = Process(target=process_rack, args=(i,imagePath,data_queue))
-        proc.start()
-        process_list.append(proc)
+        #proc = Process(target=process_rack, args=(i,imagePath,data_queue))
+        #proc.start()
+        #process_list.append(proc)
         
     motor.returnHome()
     motor.release()
     
-    for proc in process_list:
-        proc.join()
+    #for proc in process_list:
+        #proc.join()
     
     #found_data_list = []
     #while not data_queue.empty():
@@ -76,7 +79,7 @@ def scan(num_racks):
     
     #To grab data at row,col do data_indices[hash((col,row))]
     
-    return data_queue
+    #return data_queue
 
 @app.after_request
 def add_header(response):
@@ -179,27 +182,30 @@ def get_csv_file():
 #This is the first scan. It is done before the user runs the tray
 @app.route('/picking_scan_tray')
 def picking_scan_tray():
-    tray_id, file_data, num_racks = session['tray_data_list'][session['current_tray_num']]
-    edge_length = 25 if num_racks == 6 else 30
+    #tray_id, file_data, num_racks = session['tray_data_list'][session['current_tray_num']]
+    #edge_length = 25 if num_racks == 6 else 30
 
-    viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
-    viewer.new_tray(file_data)
+    #viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
+    #viewer.new_tray(file_data)
 
     #The tray is scanned and the info is returned into data_queue
-    scan_data_queue = scan(num_racks)
+    #scan_data_queue = scan(num_racks)
 
     #You need to make the tray image (save it to the normal spot, static/traydisplay.jpg)
     #and set desired_tubes_incorrect and total_tubes_correct
     #this might be run multiple times so it needs to be able to handle that
-    img_save_path = os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg')
+    #img_save_path = os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg')
 
-    scan_data_by_rack, desired_tubes_incorrect, total_tubes_incorrect = viewer.make_pre_run_scan_results(scan_data_queue, \
-                                                                                      file_data, \
-                                                                                      num_racks, \
-                                                                                      img_save_path)
+    #scan_data_by_rack, desired_tubes_incorrect, total_tubes_incorrect = viewer.make_pre_run_scan_results(scan_data_queue, \
+    #                                                                                  file_data, \
+    #                                                                                  num_racks, \
+    #                                                                                  img_save_path)
     
     #save returned scan data dict to memory so we can tell what changed after running tray
-    session['prev_scan_data'] = scan_data_by_rack
+    #session['prev_scan_data'] = scan_data_by_rack
+    
+    desired_tubes_incorrect = 0
+    total_tubes_incorrect = 0
 
     return render_template('picking/tray_scanned.html',
                            desiredTubesIncorrect = desired_tubes_incorrect, totalTubesIncorrect = total_tubes_incorrect)
@@ -247,15 +253,17 @@ def run_tray():
         motor.returnHome()
         motor.release()
         
-        scan_data_queue = scan(num_racks)
+        #scan_data_queue = scan(num_racks)
         
         #You need to make the tray image (save it to the normal spot, static/traydisplay.jpg)
         #and set running_errors somewhere in here
-        running_errors = viewer.make_post_run_scan_results(scan_data_queue, \
-                                                           tray_data_pick, \
-                                                           session['prev_scan_data'], \
-                                                           num_racks, \
-                                                           os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+        #running_errors = viewer.make_post_run_scan_results(scan_data_queue, \
+        #                                                   tray_data_pick, \
+        #                                                   session['prev_scan_data'], \
+        #                                                   num_racks, \
+        #                                                   os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+
+        running_errors = 0
 
     return render_template('picking/tray_ran.html', runningErrors = running_errors)
 
@@ -289,13 +297,15 @@ def next_tray():
     tray_data_list = session['tray_data_list']
     tray_id, tray_data, num_racks = tray_data_list[session['current_tray_num']]
 
-    edge_length = 25 if num_racks == 6 else 30
+    #edge_length = 25 if num_racks == 6 else 30
 
-    viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
-    viewer.new_tray(tray_data)
+    #viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
+    #viewer.new_tray(tray_data)
 
     #save image of tray in 'static/' to to be shown in run_tray
-    viewer.save_image(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+    #viewer.save_image(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+    
+    #tray_id = 0
 
     return render_template('picking/scan_tray.html', nextTrayId = tray_id)
 
