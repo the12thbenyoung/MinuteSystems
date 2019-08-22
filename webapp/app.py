@@ -94,14 +94,14 @@ def nextTray(viewer, tray_id, tray_data):
     
 @app.route('/')
 def index():
-    return render_template('index.html')
-
-@app.route('/picking_begin')
-def picking_begin():
     #truncate output csv file and write headers
     with open(os.path.join(UPLOAD_FOLDER, 'output.csv'), 'w') as f:
         f.write('TrayID,RackID,RackPositionInTray,WellID,SampleBarcode\n')
 
+    return render_template('index.html')
+
+@app.route('/picking_begin')
+def picking_begin():
     return render_template('picking/upload_file.html')
 
 def allowed_file(filename):
