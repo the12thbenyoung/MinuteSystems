@@ -98,6 +98,10 @@ def index():
 
 @app.route('/picking_begin')
 def picking_begin():
+    #truncate output csv file and write headers
+    with open(os.path.join(UPLOAD_FOLDER, 'output.csv'), 'w') as f:
+        f.write('TrayID,RackID,RackPositionInTray,WellID,SampleBarcode\n')
+
     return render_template('picking/upload_file.html')
 
 def allowed_file(filename):
@@ -109,9 +113,6 @@ def get_csv_file():
     os.system('rm ' + os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
     os.system('rm ' + os.path.join(WORKING_DIRECTORY, 'static/images/*.jpg'))
     
-    output = open(os.path.join(UPLOAD_FOLDER, 'output.csv'), "w+")
-    output.close()
-
     if 'file' not in request.files:
         flash('No file part')
         return redirect(request.url)
@@ -220,8 +221,8 @@ def skip_tray():
 def run_tray():
     tray_data_list = session.get('tray_data_list', None)
     if tray_data_list:
-        #run the first tray and remove it
-        tray, tray_data, num_racks = tray_data_list[session['current_tray_num']]
+        #run the current tray
+        tray_id, tray_data, num_racks = tray_data_list[session['current_tray_num']]
         
         edge_length = 25 if num_racks == 6 else 30
         viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
@@ -230,32 +231,39 @@ def run_tray():
         tray_data_pick = tray_data[tray_data['Pick'] == 1]
         racks = unique(tray_data_pick['RackPositionInTray'])
         racks.sort()
-        for rackId in racks:
-            rackData = tray_data_pick[tray_data_pick['RackPositionInTray'] == rackId]
+        for rack_index in racks:
+            rackData = tray_data_pick[tray_data_pick['RackPositionInTray'] == rack_index]
             columns = unique(rackData['TubeColumn'])
             columns.sort()
             for col in columns:
                 #move to rack,column
-                # motor.moveToTube(int(rackId), int(col))
+                # motor.moveToTube(int(rack_index), int(col))
                 colData = rackData[rackData['TubeColumn'] == col]
                 for row in colData['TubeRow']:
-                    print(tray, rackId, col, row)
+                    print(tray_id, rack_index, col, row)
                     #activate soleniod
                     # solenoidArray.actuateSolenoid(int(row))
-                    viewer.pick_tube(rackId, col, row)
 
         # motor.returnHome()
         # motor.release()
         
         scan_data_queue = scan(num_racks)
         
+        #list of rack ids - index is rack location in tray
+        rack_ids = []
+        for rack_index in range(num_racks):
+            rack_ids.append(tray_data[tray_data['RackPositionInTray'] == rack_index].iloc[0]['RackID'])
+
         #You need to make the tray image (save it to the normal spot, static/traydisplay.jpg)
         #and set running_errors somewhere in here
         running_errors = viewer.make_post_run_scan_results(scan_data_queue, \
                                                            tray_data_pick, \
                                                            session['prev_scan_data'], \
                                                            num_racks, \
-                                                           os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+                                                           tray_id,
+                                                           rack_ids,
+                                                           os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'), \
+                                                           os.path.join(UPLOAD_FOLDER, 'output.csv'))
 
     return render_template('picking/tray_ran.html', runningErrors = running_errors)
 
@@ -332,6 +340,7 @@ def scan_tray(trayId=None,rackId0=None,rackId1=None,rackId2=None,rackId3=None,ra
 
     viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
     viewer.new_tray()
+    #makes image and writes to output csv file
     viewer.make_just_scan_results(scan_data_queue, \
                                   trayId, \
                                   rack_ids, \

@@ -332,7 +332,7 @@ class trayStatusViewer:
         self.save_image(output_file)
         return scan_data_by_rack, desired_tubes_incorrect, total_tubes_incorrect
 
-    def make_post_run_scan_results(self, scan_data_queue, targeted_data, prev_scan_data, num_racks, output_file):
+    def make_post_run_scan_results(self, scan_data_queue, targeted_data, prev_scan_data, num_racks, tray_id, rack_ids, img_output_file, csv_output_file):
         """given the results of the camera scan of a tray (as output by the scan() method
         in app.py), a dataframe with the tubes that should have been picked, and a dict
         with the results of the scan done before the tray was ran, and make an image 
@@ -367,19 +367,32 @@ class trayStatusViewer:
 
             targeted_tubes_set.add(hash((rack,col,row)))
 
-        #check all tubes for ones that were wrongly picked
-        for rack in range(num_racks):
+        ALPHABET='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        output_df = pd.DataFrame([],columns=['TrayID','RackID','RackPositionInTray','WellID','SampleBarcode'])
+        #check all tubes for ones that were wrongly picked and make csv output
+        for rack_index in range(num_racks):
             for col in range(self.TUBES_ALONG_X):
                 for row in range(self.TUBES_ALONG_Y):
                     #if tube was a target, it can't have been incorrectly picked (it was supposed to be)
-                    if hash((rack,col,row)) not in targeted_tubes_set:
-                        old_barcode = prev_scan_data.get(rack,{}).get(hash((col,row)))
-                        new_barcode = scan_data_by_rack.get(rack,{}).get(hash((col,row)))
+                    new_barcode = scan_data_by_rack.get(rack_index,{}).get(hash((col,row)))
+                    if hash((rack_index,col,row)) not in targeted_tubes_set:
+                        old_barcode = prev_scan_data.get(rack_index,{}).get(hash((col,row)))
                         if old_barcode and not new_barcode:
                             running_errors += 1
-                            self.get_tube(rack,col,row).show_as_picked_wrong()
+                            self.get_tube(rack_index,col,row).show_as_picked_wrong()
 
-        self.save_image(output_file)
+                    #add row to csv output
+                    output_row = {'TrayID': tray_id, \
+                                  'RackID': rack_ids[rack_index], \
+                                  'RackPositionInTray': rack_index, \
+                                  'WellID': ALPHABET[col] + str(row+1), \
+                                  'SampleBarcode': new_barcode}
+                    output_df = output_df.append(output_row, ignore_index = True)
+
+        self.save_image(img_output_file)
+        #append to end of csv output
+        output_df.to_csv(csv_output_file, mode='a', index=False, header=False)
+
         return running_errors
 
     def make_just_scan_results(self, scan_data_queue, trayId, rack_ids, img_output_file, csv_output_file):
@@ -409,7 +422,7 @@ class trayStatusViewer:
                     output_df = output_df.append(output_row, ignore_index = True)
 
         self.save_image(img_output_file)
-        output_df.to_csv(csv_output_file, index=False)
+        output_df.to_csv(csv_output_file, mode='a', index=False, header=False)
 
 if __name__ == '__main__':
     NUM_RACKS = 5
