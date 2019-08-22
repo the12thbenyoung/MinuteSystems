@@ -2,8 +2,8 @@ from flask import Flask, flash, render_template, request, redirect, send_from_di
 from flask_session import Session
 from werkzeug.utils import secure_filename
 import time
-# from solenoids.solenoidArray import SolenoidArray
-# from motors.motor import Motor
+from solenoids.solenoidArray import SolenoidArray
+from motors.motor import Motor
 import pandas as pd
 from viewer.trayStatusViewer import trayStatusViewer
 from numpy import unique
@@ -30,9 +30,9 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config.from_object(__name__)
 Session(app)
 
-# motor = Motor()
+motor = Motor()
 
-# solenoidArray = SolenoidArray()
+solenoidArray = SolenoidArray()
 
 #convert 'B08' style input from file to (x,y) index tuple - (1,7)
 def convertRow(rowLetter):
@@ -50,21 +50,21 @@ def scan(num_racks):
     data_queue = Queue()
     
     for i in range(num_racks):
-        # motor.moveToRackForCamera(i)
+        motor.moveToRackForCamera(i)
 
         imagePath = 'qr/shpongus.jpg'
-        # imagePath = os.path.join(WORKING_DIRECTORY, f'camerapics/rack{i}.jpg')
-        # camera.start_preview()
-        # sleep(2)
-        # camera.capture(imagePath)
-        # camera.stop_preview()
+        imagePath = os.path.join(WORKING_DIRECTORY, f'camerapics/rack{i}.jpg')
+        camera.start_preview()
+        sleep(2)
+        camera.capture(imagePath)
+        camera.stop_preview()
 
         proc = Process(target=process_rack, args=(i,imagePath,data_queue))
         proc.start()
         process_list.append(proc)
         
-    # motor.returnHome()
-    # motor.release()
+    motor.returnHome()
+    motor.release()
     
     for proc in process_list:
         proc.join()
@@ -236,16 +236,16 @@ def run_tray():
             columns.sort()
             for col in columns:
                 #move to rack,column
-                # motor.moveToTube(int(rackId), int(col))
+                motor.moveToTube(int(rackId), int(col))
                 colData = rackData[rackData['TubeColumn'] == col]
                 for row in colData['TubeRow']:
                     print(tray, rackId, col, row)
                     #activate soleniod
-                    # solenoidArray.actuateSolenoid(int(row))
+                    solenoidArray.actuateSolenoid(int(row))
                     viewer.pick_tube(rackId, col, row)
 
-        # motor.returnHome()
-        # motor.release()
+        motor.returnHome()
+        motor.release()
         
         scan_data_queue = scan(num_racks)
         
