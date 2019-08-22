@@ -39,7 +39,7 @@
 <form action="/scanning_begin" method="get">
   <input type="submit" value="Change IDs">
 </form>
-<form action="/scan_tray" method="get">
+<form action="{{ url_for('scan_tray', trayId=trayid, rackId0=rackId0, rackId1=rackId1 , rackId2=rackId2, rackId3=rackId3, rackId4=rackId4, rackId5=rackId5)}}">
   <input type="submit" value="Scan Tray">
 </form>
 </body>

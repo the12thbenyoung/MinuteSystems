@@ -316,7 +316,9 @@ def get_data_indices(data_locations, img=None):
     for data_loc in data_locations:
         row = np.argmin([abs(data_loc['y'] - row_coor) for row_coor in ROW_COORDINATES])
         col = np.argmin([abs(data_loc['x'] - col_coor) for col_coor in COLUMN_COORDINATES])
-        data_indices[hash((col,row))] = data_loc['data']
+        #the image is sideways - here we hash (row,col) but elsewhere the hash is (col,row)
+        #if things are backwards, you may have to do (row,12-col) or something like that
+        data_indices[hash((row,col))] = data_loc['data']
 
     return data_indices
 

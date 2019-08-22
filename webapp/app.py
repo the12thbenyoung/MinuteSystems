@@ -320,21 +320,23 @@ def scanning_enter_ids():
 
 #This is run after the user presses Scan Tray on check_ids.html
 #Or after the user presses Rescan Tray on tray_scanned.html
-@app.route('/scan_tray', methods=['GET'])
-def scan_tray():
-    #you'll need to grab the tray_id and rackId variables from the previous function somehow
-    tray_id = request.args.get('tray_id')
-    rack_ids = [request.args.get(f'rackId{i}') for i in range(5)]
-    print(rack_ids)
+@app.route('/scan_tray<int:trayId>/<int:rackId0>/<int:rackId1>/<int:rackId2>/<int:rackId3>/<int:rackId4>/<int:rackId5>',
+           methods=['GET','POST'])
+def scan_tray(trayId=None,rackId0=None,rackId1=None,rackId2=None,rackId3=None,rackId4=None,rackId5=None):
+    num_racks = 6 if rackId5 else 5
+    edge_length = 25 if num_racks == 6 else 30
 
-    num_racks = 5 if not rack_ids[-1] else 6
-
-    # scan_data_queue = scan(num_racks)
+    scan_data_queue = scan(num_racks)
     #And then process this data into /static/traydisplay.jpg so it can be displayed
     #Also we need to put the data into a csv file so it can be downloaded
     #This function might be ran multiple times for the same tray
     
-    return render_template('scanning/tray_scanned.html')
+    viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
+    viewer.new_tray()
+    viewer.make_just_scan_results(scan_data_queue, os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
+    
+    # return render_template('scanning/scanning_tray_scanned.html')
+    return render_template('scanning/scanning_tray_scanned.html')
 
 @app.route('/scanning_download_csv')
 def scanning_download_csv():

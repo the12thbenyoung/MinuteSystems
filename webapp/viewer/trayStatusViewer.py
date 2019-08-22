@@ -217,12 +217,15 @@ class trayStatusViewer:
                            fill=(0,0,0))
 
     #determine which tubes start as ABSENT, PRESENT, or TARGET and color accordingly
-    def new_tray(self, locationData):
+    def new_tray(self, locationData=pd.DataFrame()):
         #reset all tubes to ABSENT
         for rack in self.tubes:
             for col in rack:
                 for tube in col:
                     tube.show_as_absent()
+        #if no locationData was input, we just want an empty tray
+        if len(locationData) == 0:
+            return
 
         for _, row in locationData.iterrows():
             (x,y) = int(row['TubeColumn']), int(row['TubeRow'])
@@ -378,6 +381,24 @@ class trayStatusViewer:
 
         self.save_image(output_file)
         return running_errors
+
+    def make_just_scan_results(self, scan_data_queue, output_file):
+        """When user is just scanning a tray to create an output file, without running.
+        No file input, so just take data from scan and create a simple visual showing
+        just whether tubes are present or absent.
+        Assume the viewer was initialized with all tubes showing absent
+        """
+        while not scan_data_queue.empty():
+            rack, _, rack_data, _, _ = scan_data_queue.get() 
+            #each rack's data is stored as a dict with hashed (col,row) keys that we can't unhash,
+            #so have to loop thru every well and check if it had data returned for it
+            for col in range(self.TUBES_ALONG_X):
+                for row in range(self.TUBES_ALONG_Y):
+                    if hash((col,row)) in rack_data:
+                        print(col,row)
+                        self.get_tube(rack,col,row).show_as_present()
+
+            self.save_image(output_file)
 
 
 if __name__ == '__main__':
