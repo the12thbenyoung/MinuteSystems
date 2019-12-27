@@ -8,9 +8,9 @@ import pandas as pd
 from viewer.trayStatusViewer import trayStatusViewer
 from numpy import unique
 import os
-# from picamera import PiCamera
-# from qr.dataMatrixDecoder import process_rack
-# from multiprocessing import Pool, Process, Queue
+from picamera import PiCamera
+from qr.dataMatrixDecoder import process_rack
+from multiprocessing import Pool, Process, Queue
 
 #CONSTANTS SECTION STARTS
 SESSION_TYPE = 'redis'
@@ -50,36 +50,36 @@ def scan(num_racks):
     (rack number, filename, data: {hash((col,row)): tube number}, number of tubes located, number of tubes located)
     """
     process_list = []
-    #data_queue = Queue()
+    data_queue = Queue()
     
     for i in range(num_racks):
         motor.moveToRackForCamera(i)
 
         imagePath = 'qr/shpongus.jpg'
         imagePath = os.path.join(WORKING_DIRECTORY, f'camerapics/rack{i}.jpg')
-        #camera.start_preview()
-        #sleep(2)
+        camera.start_preview()
+        sleep(2)
         #camera.capture(imagePath)
         #camera.stop_preview()
 
-        #proc = Process(target=process_rack, args=(i,imagePath,data_queue))
-        #proc.start()
-        #process_list.append(proc)
+        proc = Process(target=process_rack, args=(i,imagePath,data_queue))
+        proc.start()
+        process_list.append(proc)
         
     motor.returnHome()
     motor.release()
     
-    #for proc in process_list:
-        #proc.join()
+    for proc in process_list:
+        proc.join()
     
-    #found_data_list = []
-    #while not data_queue.empty():
-    #    filename, dataIndices, tubeFound, matricesDecoded = data_queue.get()
-    #    found_data_list.append([filename, tubesFound, matricesDecoded])
+    found_data_list = []
+    while not data_queue.empty():
+        filename, dataIndices, tubeFound, matricesDecoded = data_queue.get()
+        found_data_list.append([filename, tubesFound, matricesDecoded])
     
     #To grab data at row,col do data_indices[hash((col,row))]
     
-    #return data_queue
+    return data_queue
 
 @app.after_request
 def add_header(response):
@@ -134,7 +134,7 @@ def get_csv_file():
         inputDataframe.dropna(subset=['WellID'], axis='rows', inplace=True)
         #subtract 1 from each RackPositionInTray
         inputDataframe['RackPositionInTray'] = inputDataframe['RackPositionInTray'] \
-                                                .apply(lambda x: x - 1)
+                                                .apply(lambda x: int(x) - 1)
         #split tubePositionsList into columns (first letter) and rows (second two numbers)
         tubePositionsList = [[convertRow(row[0]),int(row[1:])-1] for row in inputDataframe['WellID']]
         tubePositionsDf = pd.DataFrame(tubePositionsList, columns = ['TubeColumn', 'TubeRow'])
@@ -243,13 +243,13 @@ def run_tray():
             columns.sort()
             for col in columns:
                 #move to rack,column
-                motor.moveToTube(int(rackId), int(col))
+                motor.moveToTube(int(rack_index), int(col))
                 colData = rackData[rackData['TubeColumn'] == col]
                 for row in colData['TubeRow']:
                     print(tray_id, rack_index, col, row)
                     #activate soleniod
                     solenoidArray.actuateSolenoid(int(row))
-                    viewer.pick_tube(rackId, col, row)
+                    viewer.pick_tube(rack_index, col, row)
 
         motor.returnHome()
         motor.release()
@@ -277,13 +277,13 @@ def run_tray():
 #This is run after the user presses Scan Again on tray_ran.html
 @app.route('/picking_rescan_tray')
 def picking_rescan_tray():
-    tray_id, file_data, num_racks = session['tray_data_list'][session['current_tray_num']]
-    edge_length = 25 if num_racks == 6 else 30
+    #tray_id, file_data, num_racks = session['tray_data_list'][session['current_tray_num']]
+    #edge_length = 25 if num_racks == 6 else 30
 
-    viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
-    viewer.new_tray(file_data)
+    #viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
+    #viewer.new_tray(file_data)
 
-    scan_data_queue = scan(num_racks) #gotta grab num_racks here somehow
+    #scan_data_queue = scan(num_racks) #gotta grab num_racks here somehow
     
     #You need to make the tray image (save it to the normal spot, static/traydisplay.jpg)
     #and set running_errors somewhere in here
