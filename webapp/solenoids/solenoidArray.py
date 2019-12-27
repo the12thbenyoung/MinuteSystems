@@ -20,21 +20,22 @@ class SolenoidArray:
             self.solenoid.on()
             sleep(.5)
             self.solenoid.off()
+            sleep(4)
 
     def __init__(self):
         self.solenoids = [
-            self.Solenoid(22),
-            self.Solenoid(24),
-            self.Solenoid(5),
-            self.Solenoid(12),
-            self.Solenoid(16),
-            self.Solenoid(20),
-            self.Solenoid(27),
-            self.Solenoid(23),
-            self.Solenoid(25),
-            self.Solenoid(6),
+            self.Solenoid(19),
             self.Solenoid(13),
-            self.Solenoid(19)
+            self.Solenoid(6),
+            self.Solenoid(25),
+            self.Solenoid(23),
+            self.Solenoid(27),
+            self.Solenoid(20),
+            self.Solenoid(16),
+            self.Solenoid(12),
+            self.Solenoid(5),
+            self.Solenoid(22),
+            self.Solenoid(24)
         ]
 
     def actuateSolenoid(self, solenoid):
