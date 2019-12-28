@@ -304,7 +304,7 @@ class trayStatusViewer:
                 for row in range(self.TUBES_ALONG_Y):
                     this_tube = self.get_tube(rack,col,row)
                     file_barcode = file_data_dict.get(hash((rack,col,row)),{}).get('barcode')
-                    if file_barcode is not None:
+                    if isinstance(file_barcode, str):
                         file_barcode = int(file_barcode)
                     file_pick = file_data_dict.get(hash((rack,col,row)),{}).get('pick')
                     scan_barcode = scan_data_by_rack.get(rack,{}).get(hash((col,row)))

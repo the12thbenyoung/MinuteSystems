@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 from pylibdmtx.pylibdmtx import decode
 from multiprocessing import Pool, Process, Queue
+import os
 
 FILENAME = 'shpongus.jpg'
 
@@ -333,19 +334,19 @@ def process_rack(rack_num, filename, data_queue = None):
     #camera has to be at an angle to be in focus, meaning tubes on the right side are
     #smaller than their bretheren on the left. Warp perspective to correct this
     rows,cols = rack_original.shape
-
+    print(8)
     source_pts = np.float32([[0,0],[0,rows-1],[cols-1,200],[cols-1,rows-200]])
     destination_pts = np.float32([[0,0],[0,rows-1],[cols-1,0],[cols-1,rows-1]])
     distort_matrix = cv2.getPerspectiveTransform(source_pts,destination_pts)
     rack_warp = cv2.warpPerspective(rack_original,distort_matrix,(cols,rows))
-
+    print(7)
     rack_blur = cv2.GaussianBlur(rack_warp,(5,5),0)
     rack_thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
                                        cv2.THRESH_BINARY_INV,301,TUBE_AREA_THRESH_CONSTANT)
-
+    print(6)
     # erode image to try to get rid of white bridges between tubes and gaps on side of rack
     rack_erode = cv2.erode(rack_thr, rack_erosion_kernel, iterations=1)
-
+    print(5)
     #open to remove noise and give smaller number of contours
     rack_open = cv2.morphologyEx(rack_thr, cv2.MORPH_OPEN, morphology_kernel, iterations=5)
 
@@ -353,9 +354,10 @@ def process_rack(rack_num, filename, data_queue = None):
         show_image_small(['rack', rack_open])
         exit(0)
 
+    print(4)
     #get contours around tubes
     contours, hierarchy = cv2.findContours(rack_open, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
+    print(3)
     #each set holds a group of points with similar y-coordinate - corresponding to one row in the rack
     rowLists = []
     #dict to associate (x,y) coordinate pairs with decoded outputs.
@@ -383,7 +385,7 @@ def process_rack(rack_num, filename, data_queue = None):
                               map(lambda c: dict(zip(('x','y','w','h'), \
                                                      cv2.boundingRect(c))), \
                                   contours)))
-
+    print(2)
     #make a list of cropped tube images
     tube_images = []
     for dims in bounding_rect_dims:
@@ -401,16 +403,20 @@ def process_rack(rack_num, filename, data_queue = None):
             tube_dict['image'] = tube_img
             tube_images.append(tube_dict)
     tubes_found = len(tube_images)
+    print(1)
 
     if DRAW_CONTOURS:
         draw_contour_boxes(rack_warp, bounding_rect_dims)
+    
+    print('done with setup $$$$$$$$$$$$$$')
 
     #data_queue being passed signifies that this should be done w/ multiprocessing
-    #if data_queue:
     if False:
         #create a pool of processes to decode images in parallel
-        p = Pool(4)
+        p = Pool(2)
         codes = p.map(process_tube, tube_images)
+        p.close()
+        p.join()
     else:
         codes = []
         for tube in tube_images:
