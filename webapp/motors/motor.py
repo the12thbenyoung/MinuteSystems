@@ -16,7 +16,7 @@ class Motor:
     MICROSTEPS_PER_RACK = 6805
     MICROSTEPS_PER_TUBE = 722
     
-    CAMERA_OFFSET = 2402 #TEST THIS
+    CAMERA_OFFSET = 1600 #TEST THIS was 2402
     RACK_OFFSET = 7045
 
     def __init__(self):
@@ -69,7 +69,6 @@ class Motor:
             self.stepForwardFull()
         self.position += microround*16
         
-    #TEST THIS
     def moveToRackForCamera(self, rack):
         microsteps = (rack*self.MICROSTEPS_PER_RACK)-self.position+self.CAMERA_OFFSET
         microround = round(microsteps/16)
@@ -87,7 +86,7 @@ class Motor:
             if (self.limitSwitch.is_pressed == True):
                 break
         while (self.limitSwitch.is_pressed == False):
-            self.stepBackwardMicro()
+            self.stepBackward()
         self.position = 0
 
     def release(self):

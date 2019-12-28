@@ -242,7 +242,7 @@ def process_matrix(img, blockSize, threshFactor):
 
         #empty slots have weird aspect ratios (tall or wide) after they're processed. We 
         #can use this to filter out some of them
-        if height/width < 1.5 and width/height < 1.5:
+        if width!=0 and height!=0 and height/width < 1.5 and width/height < 1.5:
 
             #only otsu threshold matrix if it's cropped nicely - otherwise lighter surrounding
             #colors will mess it up
@@ -318,7 +318,7 @@ def get_data_indices(data_locations, img=None):
         col = np.argmin([abs(data_loc['x'] - col_coor) for col_coor in COLUMN_COORDINATES])
         #the image is sideways - here we hash (row,col) but elsewhere the hash is (col,row)
         #if things are backwards, you may have to do (row,12-col) or something like that
-        data_indices[hash((row,col))] = data_loc['data']
+        data_indices[hash((7-row,col))] = data_loc['data']
 
     return data_indices
 
@@ -406,7 +406,8 @@ def process_rack(rack_num, filename, data_queue = None):
         draw_contour_boxes(rack_warp, bounding_rect_dims)
 
     #data_queue being passed signifies that this should be done w/ multiprocessing
-    if data_queue:
+    #if data_queue:
+    if False:
         #create a pool of processes to decode images in parallel
         p = Pool(4)
         codes = p.map(process_tube, tube_images)

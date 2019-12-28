@@ -283,7 +283,9 @@ class trayStatusViewer:
         #turn scan_data queue into dict with racks as keys
         scan_data_by_rack = {}
         while not scan_data_queue.empty():
-            rack_id, _, rack_data, _, _ = scan_data_queue.get() 
+            rack_id, _, rack_data, _, _ = scan_data_queue.get()
+            print(rack_id)
+            print(rack_data)
             scan_data_by_rack[rack_id] = rack_data
 
         #turn file_data dataframe into a dict by rack,col,row as we will be looking up 
@@ -302,9 +304,13 @@ class trayStatusViewer:
                 for row in range(self.TUBES_ALONG_Y):
                     this_tube = self.get_tube(rack,col,row)
                     file_barcode = file_data_dict.get(hash((rack,col,row)),{}).get('barcode')
+                    if file_barcode is not None:
+                        file_barcode = int(file_barcode)
                     file_pick = file_data_dict.get(hash((rack,col,row)),{}).get('pick')
                     scan_barcode = scan_data_by_rack.get(rack,{}).get(hash((col,row)))
-                    print(file_barcode, scan_barcode, file_pick)
+                    if scan_barcode is not None:
+                        scan_barcode = int(scan_barcode)
+                    #print(file_barcode, scan_barcode, file_pick)
 
                     #tube is absent in both file and scan
                     if not scan_barcode and (not file_barcode or pd.isna(file_barcode)):
