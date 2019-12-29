@@ -13,7 +13,7 @@ from time import sleep
 from multiprocessing import Pool, Process, Queue
 import os
 
-FILENAME = 'real_images/rack0.jpg'
+FILENAME = 'real_images/rack4.jpg'
 
 SHOW_IMAGES = 0
 SHOW_RACK = 0
@@ -29,15 +29,17 @@ NUM_ROWS = 8
 NUM_COLS = 12
 
 #for cropping tube area (tube+rims/shadows) from rack
-TUBE_AREA_THRESH_CONSTANT = 25
+TUBE_AREA_THRESH_CONSTANT = 20
 #for cropping just circular tube from tube area
 TUBE_THRESH_FACTOR = 0.80
 #for cropping data matrix from harris corner heatmap image
 HARRIS_THRESH_FACTOR = 0.01
 #for removing surrounding numbers but keeping data matrix
 NUMBERS_THRESH_FACTOR = 0.30
-#for thresholding matrix after it's been cropped from tube
-MATRIX_THRESH_FACTOR = 0.35
+#for thresholding tube to find matrix in first failsafe
+FAILSAFE_THRESH_FACTOR = 0.35
+#for adaptive thresholding tube to find matrix in second failsafe
+FAILSAFE_ADAPTIVE_THRESH_FACTOR = 5
 
 #size of box used in harris corner algorithm
 HARRIS_BLOCK_SIZE = 6
@@ -297,13 +299,20 @@ def process_tube(tube_dict):
         #if this failed, just run on uncropped tube
         data = decode(tube_img)
         if not data:
-            #try again, but threshold tube
-            x, tube_thr = cv2.threshold(tube_img, MATRIX_THRESH_FACTOR * tube_img.max(), 255, cv2.THRESH_BINARY)
+            #try again, but adaptive threshold
+            rack_blur = cv2.GaussianBlur(tube_img,(5,5),0)
+            tube_thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+                                             cv2.THRESH_BINARY_INV,301,\
+                                             FAILSAFE_ADAPTIVE_THRESH_FACTOR)
             data = decode(tube_thr)
-            #finally, if it really couldn't find it
             if not data:
-                badcount += 1
-                cv2.imwrite(f'images/badkek{badcount}.jpg', tube_img)
+                #try again, but threshold tube
+                _, tube_thr = cv2.threshold(tube_img, FAILSAFE_THRESH_FACTOR * tube_img.max(), 255, cv2.THRESH_BINARY)
+                data = decode(tube_thr)
+                #finally, if it really couldn't find it
+                if not data:
+                    badcount += 1
+                    cv2.imwrite(f'images/badkek{badcount}.jpg', tube_img)
     #don't need image anymore, but do want result of decode
     del tube_dict['image']
     tube_dict['data'] = int(data[0].data) if data else None
