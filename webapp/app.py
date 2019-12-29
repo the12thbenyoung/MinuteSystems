@@ -32,7 +32,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config.from_object(__name__)
 Session(app)
 
-# motor = Motor()
+motor = Motor()
 
 solenoidArray = SolenoidArray()
 
@@ -260,8 +260,8 @@ def run_tray():
                     solenoidArray.actuateSolenoid(int(row))
                     viewer.pick_tube(rack_index, col, row)
 
-        # motor.returnHome()
-        # motor.release()
+        motor.returnHome()
+        motor.release()
 
         scan_data_queue = scan(num_racks)
 
@@ -350,19 +350,24 @@ def scanning_enter_ids():
     rack_id3 = request.form['rackid3']
     rack_id4 = request.form['rackid4']
     rack_id5 = request.form['rackid5']
+    if (rack_id5 == ''):
+        rack_id5 = -1
+    
+    session['scanning_ids'] = (tray_id, rack_id0, rack_id1, rack_id2, rack_id3, rack_id4, rack_id5)
 
     return render_template('scanning/check_ids.html', trayid = tray_id, rackId0 = rack_id0, rackId1 = rack_id1, \
                            rackId2 = rack_id2, rackId3 = rack_id3, rackId4 = rack_id4, rackId5 = rack_id5)
 
 #This is run after the user presses Scan Tray on check_ids.html
 #Or after the user presses Rescan Tray on tray_scanned.html
-@app.route('/scan_tray<int:trayId>/<int:rackId0>/<int:rackId1>/<int:rackId2>/<int:rackId3>/<int:rackId4>/<int:rackId5>',
-           methods=['GET','POST'])
-def scan_tray(trayId=None,rackId0=None,rackId1=None,rackId2=None,rackId3=None,rackId4=None,rackId5=None):
-    num_racks = 6 if rackId5 else 5
+@app.route('/scan_tray')
+           #methods=['GET','POST'])
+def scan_tray():
+    trayId,rackId0,rackId1,rackId2,rackId3,rackId4,rackId5 = session['scanning_ids']
+    num_racks = 6 if rackId5 != -1 else 5
     edge_length = 25 if num_racks == 6 else 30
 
-    rack_ids = [id for id in [rackId0,rackId1,rackId2,rackId3,rackId4,rackId5] if id]
+    rack_ids = [id for id in [rackId0,rackId1,rackId2,rackId3,rackId4,rackId5] if id != -1]
 
     scan_data_queue = scan(num_racks)
 
@@ -377,8 +382,8 @@ def scan_tray(trayId=None,rackId0=None,rackId1=None,rackId2=None,rackId3=None,ra
 
     return render_template('scanning/scanning_tray_scanned.html')
 
-@app.route('/scanning_download_csv')
-def scanning_download_csv():
+@app.route('/download_csv')
+def download_csv():
     return send_file(os.path.join(UPLOAD_FOLDER, 'output.csv'), mimetype='text/csv',
                      attachment_filename='output.csv', as_attachment=True)
 

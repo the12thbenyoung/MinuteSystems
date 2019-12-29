@@ -2,44 +2,44 @@
 <body>
 <h1>Please check the ids to make sure they are correct</h1>
 <h3> 
-    {% if trayid  %}
+    {% if trayId != None %}
         Tray ID: {{ trayid }}
     {% endif %}
 </h3>
 <h3>
-    {% if rackid0 != None %}
+    {% if rackId0 != None %}
         Rack 1 ID: {{ rackId0 }}
     {% endif %}
 </h3>
 <h3>
-    {% if rackid1 != None %}
+    {% if rackId1 != None %}
         Rack 2 ID: {{ rackId1 }}
     {% endif %}
 </h3>
 <h3>
-    {% if rackid2 != None %}
+    {% if rackId2 != None %}
         Rack 3 ID: {{ rackId2 }}
     {% endif %}
 </h3>
 <h3>
-    {% if rackid3 != None %}
+    {% if rackId3 != None %}
         Rack 4 ID: {{ rackId3 }}
     {% endif %}
 </h3>
 <h3>
-    {% if rackid4 != None %}
+    {% if rackId4 != None %}
         Rack 5 ID: {{ rackId4 }}
     {% endif %}
 </h3>
 <h3>
-    {% if rackid5 != None %}
+    {% if rackId5 != -1 %}
         Rack 6 ID: {{ rackId5 }}
     {% endif %}
 </h3>
 <form action="/scanning_begin" method="get">
   <input type="submit" value="Change IDs">
 </form>
-<form action="{{ url_for('scan_tray', trayId=trayid, rackId0=rackId0, rackId1=rackId1 , rackId2=rackId2, rackId3=rackId3, rackId4=rackId4, rackId5=rackId5)}}">
+<form action="/scan_tray">
   <input type="submit" value="Scan Tray">
 </form>
 </body>
