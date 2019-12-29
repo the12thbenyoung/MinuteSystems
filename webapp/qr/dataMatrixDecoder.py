@@ -273,8 +273,8 @@ def process_tube(tube_dict):
     tube_img = tube_dict['image']
     if SHOW_IMAGES:
         cv2.imshow('tube', tube_img)
-        
-    if tube_img.shape[0] < 50 or tube_img.shape[1] < 50:
+
+    if not tube_img.shape or tube_img.shape[0] < 50 or tube_img.shape[1] < 50:
         del tube_dict['image']
         tube_dict['data'] = None
         return tube_dict
@@ -321,6 +321,7 @@ def process_tube(tube_dict):
 #take dimensions (x,y,w,h) of rectangle around tube and its shadow and crop to an
 #image containing a tighter rectangle around just the tube
 def get_data_indices(data_locations, img=None):
+    matrices_decoded = 0
     data_indices = {}
 
     #if we get an image, draw coordinates next to tubes (for debugging)
@@ -335,13 +336,15 @@ def get_data_indices(data_locations, img=None):
         col = np.argmin([abs(data_loc['x'] - col_coor) for col_coor in COLUMN_COORDINATES])
         #the image is sideways - here we hash (row,col) but elsewhere the hash is (col,row)
         #if things are backwards, you may have to do (row,12-col) or something like that
-        data_indices[hash((7-row,col))] = data_loc['data']
+        if not data_indices.get(hash((7-row,col))):
+            data_indices[hash((7-row,col))] = data_loc['data']
+            matrices_decoded += 1
 
-    return data_indices
+    return data_indices, matrices_decoded
 
-def process_rack(rack_num, filename, data_queue = None):
+def process_rack(rack_num, filename, data_queue=None):
     badcount = 0
-    tubes_found, matrices_decoded = 0,0
+    tubes_found = 0
 
     img = cv2.imread(filename)
     #convert to grayscale
@@ -363,7 +366,11 @@ def process_rack(rack_num, filename, data_queue = None):
     rack_open = cv2.morphologyEx(rack_thr, cv2.MORPH_OPEN, morphology_kernel, iterations=5)
 
     if SHOW_RACK:
-        show_image_small(['rack', rack_open])
+        x = 2919
+        y = 2116
+        for i in range(8):
+            cv2.rectangle(rack_warp, (x-2*i, y - 290*i), (x-2*i+200,y-290*i+200), 1, thickness=10)
+        show_image_small(['rack', rack_warp])
         exit(0)
 
     #get contours around tubes
@@ -411,8 +418,21 @@ def process_rack(rack_num, filename, data_queue = None):
         if tube_img.size != 0:
             tube_dict['image'] = tube_img
             tube_images.append(tube_dict)
-    tubes_found = len(tube_images)
 
+    #add tubes in far right col manually, as these are usually weird
+    bottom_right_x = 2919
+    bottom_right_y = 2116
+    for i in range(8):
+        this_x = bottom_right_x - 2*i
+        this_y = bottom_right_y - 290*i
+        tube_dict = {
+            'x': this_x,
+            'y': this_y,
+            'image': rack_warp[this_y : this_y + 200, this_x : this_x + 200]
+        }
+        tube_images.append(tube_dict)
+
+    tubes_found = len(tube_images)
     if DRAW_CONTOURS:
         draw_contour_boxes(rack_warp, bounding_rect_dims)
 
@@ -425,17 +445,15 @@ def process_rack(rack_num, filename, data_queue = None):
         p.join()
     else:
         codes = []
-        for i,tube in enumerate(tube_images):
-            print(i)
+        for tube in tube_images:
             codes.append(process_tube(tube))
 
     for data_dict in codes:
         if data_dict['data']:
-            matrices_decoded += 1
             data_locations.append(data_dict)
 
     #dict that associates hashed (x,y) position with data
-    data_indices = get_data_indices(data_locations, rack_warp)
+    data_indices, matrices_decoded = get_data_indices(data_locations)
 
     if data_queue:
         data_queue.put((rack_num, filename, data_indices, tubes_found, matrices_decoded))
