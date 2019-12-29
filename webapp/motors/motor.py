@@ -16,7 +16,7 @@ class Motor:
     MICROSTEPS_PER_RACK = 6805
     MICROSTEPS_PER_TUBE = 722
     
-    CAMERA_OFFSET = 1600 #TEST THIS was 2402
+    CAMERA_OFFSET = 1300 #TEST THIS was 2402
     RACK_OFFSET = 7045
 
     def __init__(self):

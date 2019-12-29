@@ -83,8 +83,8 @@ TUBE_MIN_WIDTH = 180
 MIN_CONTOURS_IN_MATRIX = 10
 
 #approximate x and y coordinates of each row and column
-ROW_COORDINATES = [65, 353, 640, 930, 1210, 1490, 1790, 2085]
-COLUMN_COORDINATES = [90, 345, 610, 870, 1130, 1390, 1650, 1910, 2160, 2440, 2720, 2980]
+ROW_COORDINATES = [110, 398, 686, 974, 1262, 1550, 1838, 2130] # OLD VALUES [65, 353, 640, 930, 1210, 1490, 1790, 2085]
+COLUMN_COORDINATES = [47, 304, 564, 831, 1094, 1356, 1618, 1876, 2139, 2400, 2663, 2910] # OLD VALUES[90, 345, 610, 870, 1130, 1390, 1650, 1910, 2160, 2440, 2720, 2980]
 
 badcount = 0
 
@@ -270,12 +270,19 @@ def process_tube(tube_dict):
     tube_img = tube_dict['image']
     if SHOW_IMAGES:
         cv2.imshow('tube', tube_img)
+        
+    if tube_img.shape[0] < 50 or tube_img.shape[1] < 50:
+        del tube_dict['image']
+        tube_dict['data'] = None
+        return tube_dict
 
     #if there aren't many contours this is probably an empty well, so don't waste time
     #trying to process it
     tube_thr = cv2.adaptiveThreshold(tube_img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
                                        cv2.THRESH_BINARY,301,0)
+    print('done with adaptive threshold')
     tube_erode = cv2.erode(tube_thr, tube_erosion_kernel, iterations=1)
+    print('eroded tube')
 
     contours, _ = cv2.findContours(tube_erode, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if len(contours) < MIN_CONTOURS_IN_MATRIX:
@@ -295,9 +302,8 @@ def process_tube(tube_dict):
             #finally, if it really couldn't find it
             if not data:
                 badcount += 1
-                print('zoinks')
                 cv2.imwrite(f'images/badkek{badcount}.jpg', tube_img)
-    #don't need image anymore, but do want result of decode 
+    #don't need image anymore, but do want result of decode
     del tube_dict['image']
     tube_dict['data'] = int(data[0].data) if data else None
     return tube_dict
@@ -334,19 +340,15 @@ def process_rack(rack_num, filename, data_queue = None):
     #camera has to be at an angle to be in focus, meaning tubes on the right side are
     #smaller than their bretheren on the left. Warp perspective to correct this
     rows,cols = rack_original.shape
-    print(8)
     source_pts = np.float32([[0,0],[0,rows-1],[cols-1,200],[cols-1,rows-200]])
     destination_pts = np.float32([[0,0],[0,rows-1],[cols-1,0],[cols-1,rows-1]])
     distort_matrix = cv2.getPerspectiveTransform(source_pts,destination_pts)
     rack_warp = cv2.warpPerspective(rack_original,distort_matrix,(cols,rows))
-    print(7)
     rack_blur = cv2.GaussianBlur(rack_warp,(5,5),0)
     rack_thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
                                        cv2.THRESH_BINARY_INV,301,TUBE_AREA_THRESH_CONSTANT)
-    print(6)
     # erode image to try to get rid of white bridges between tubes and gaps on side of rack
     rack_erode = cv2.erode(rack_thr, rack_erosion_kernel, iterations=1)
-    print(5)
     #open to remove noise and give smaller number of contours
     rack_open = cv2.morphologyEx(rack_thr, cv2.MORPH_OPEN, morphology_kernel, iterations=5)
 
@@ -354,10 +356,8 @@ def process_rack(rack_num, filename, data_queue = None):
         show_image_small(['rack', rack_open])
         exit(0)
 
-    print(4)
     #get contours around tubes
     contours, hierarchy = cv2.findContours(rack_open, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    print(3)
     #each set holds a group of points with similar y-coordinate - corresponding to one row in the rack
     rowLists = []
     #dict to associate (x,y) coordinate pairs with decoded outputs.
@@ -385,7 +385,6 @@ def process_rack(rack_num, filename, data_queue = None):
                               map(lambda c: dict(zip(('x','y','w','h'), \
                                                      cv2.boundingRect(c))), \
                                   contours)))
-    print(2)
     #make a list of cropped tube images
     tube_images = []
     for dims in bounding_rect_dims:
@@ -403,12 +402,9 @@ def process_rack(rack_num, filename, data_queue = None):
             tube_dict['image'] = tube_img
             tube_images.append(tube_dict)
     tubes_found = len(tube_images)
-    print(1)
 
     if DRAW_CONTOURS:
         draw_contour_boxes(rack_warp, bounding_rect_dims)
-    
-    print('done with setup $$$$$$$$$$$$$$')
 
     #data_queue being passed signifies that this should be done w/ multiprocessing
     if False:
@@ -419,7 +415,8 @@ def process_rack(rack_num, filename, data_queue = None):
         p.join()
     else:
         codes = []
-        for tube in tube_images:
+        for i,tube in enumerate(tube_images):
+            print(i)
             codes.append(process_tube(tube))
 
     for data_dict in codes:
@@ -430,8 +427,6 @@ def process_rack(rack_num, filename, data_queue = None):
     #dict that associates hashed (x,y) position with data
     data_indices = get_data_indices(data_locations)
 
-    #if we're passed a queue, this is being called by a (multi)process, so add to queue
-    #with key filename so parent process can tell which image generated the data
     if data_queue:
         data_queue.put((rack_num, filename, data_indices, tubes_found, matrices_decoded))
         return None, None, None

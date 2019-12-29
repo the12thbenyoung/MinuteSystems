@@ -68,7 +68,7 @@ def scan(num_racks):
         #camera.capture(imagePath)
         #camera.stop_preview()
         
-        subprocess.call("raspistill -t 2000 -o " + imagePath, shell=True)
+        subprocess.call("raspistill -t 3000 -o " + imagePath, shell=True)
         
         process_rack(i, imagePath, data_queue)
 
