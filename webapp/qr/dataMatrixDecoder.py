@@ -9,10 +9,11 @@
 import cv2
 import numpy as np
 from pylibdmtx.pylibdmtx import decode
+from time import sleep
 from multiprocessing import Pool, Process, Queue
 import os
 
-FILENAME = 'shpongus.jpg'
+FILENAME = 'real_images/rack0.jpg'
 
 SHOW_IMAGES = 0
 SHOW_RACK = 0
@@ -314,9 +315,9 @@ def get_data_indices(data_locations, img=None):
     data_indices = {}
 
     #if we get an image, draw coordinates next to tubes (for debugging)
-    if img != None:
+    if img is not None:
         for data in data_locations:
-            cv2.putText(img, f'{data["x"]},{data["y"]}', (data['x'], data['y']), cv2.FONT_HERSHEY_SIMPLEX, 1, 1, thickness=5)
+            cv2.putText(img, f'{data["x"]},{data["y"]}', (data['x'], data['y']), cv2.FONT_HERSHEY_SIMPLEX, 1.5, 1, thickness=5)
         show_image_small(['rack', img])
 
     #find indices of row and column closest to each tube
@@ -425,7 +426,7 @@ def process_rack(rack_num, filename, data_queue = None):
             data_locations.append(data_dict)
 
     #dict that associates hashed (x,y) position with data
-    data_indices = get_data_indices(data_locations)
+    data_indices = get_data_indices(data_locations, rack_warp)
 
     if data_queue:
         data_queue.put((rack_num, filename, data_indices, tubes_found, matrices_decoded))
@@ -434,7 +435,7 @@ def process_rack(rack_num, filename, data_queue = None):
         return data_indices, tubes_found, matrices_decoded
 
 if __name__ == '__main__':
-    data_locations, tubes_found, matrices_decoded = process_rack(FILENAME)
+    data_locations, tubes_found, matrices_decoded = process_rack(0, FILENAME)
     print(data_locations)
     print(f'tubes found: {tubes_found}')
     print(f'decoded: {matrices_decoded}')

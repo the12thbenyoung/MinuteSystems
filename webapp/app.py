@@ -32,7 +32,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config.from_object(__name__)
 Session(app)
 
-motor = Motor()
+# motor = Motor()
 
 solenoidArray = SolenoidArray()
 
@@ -44,19 +44,19 @@ def convertRow(rowLetter):
 #This method scans a tray
 #It needs to be told how many rack there are in a tray
 def scan(num_racks):
-    
+
     print("Starting scan")
     #camera = PiCamera()
-    
+
     """scans the current tray containing num_rack racks.
     returns a queue of results, each element containing
     (rack number, filename, data: {hash((col,row)): tube number}, number of tubes located, number of tubes located)
     """
     process_list = []
     data_queue = Queue()
-    
+
     motor.returnHome()
-    
+
     for i in range(num_racks):
         print(motor.position)
         motor.moveToRackForCamera(i)
@@ -67,23 +67,23 @@ def scan(num_racks):
         #sleep(2)
         #camera.capture(imagePath)
         #camera.stop_preview()
-        
+
         subprocess.call("raspistill -t 3000 -o " + imagePath, shell=True)
-        
+
         process_rack(i, imagePath, data_queue)
 
         #proc = Process(target=process_rack, args=(i,imagePath,data_queue))
         #proc.start()
         #process_list.append(proc)
-        
+
     motor.returnHome()
     motor.release()
-        
+
     #for proc in process_list:
         #proc.join()
         #proc.close()
         #camera.close()
-    
+
     return data_queue
 
 @app.after_request
@@ -99,7 +99,7 @@ def nextTray(viewer, tray_id, tray_data):
 
     #initialize viewer with new tray
     viewer.new_tray(viewerInput)
-    
+
 @app.route('/')
 def index():
     #truncate output csv file and write headers
@@ -120,7 +120,7 @@ def allowed_file(filename):
 def get_csv_file():
     os.system('rm ' + os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
     os.system('rm ' + os.path.join(WORKING_DIRECTORY, 'static/images/*.jpg'))
-    
+
     if 'file' not in request.files:
         flash('No file part')
         return redirect(request.url)
@@ -172,7 +172,7 @@ def get_csv_file():
                 #only show first image in pick_tubes
                 viewer.save_image(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
                 # num_racks = self.globalNumRacks
-                
+
         #current_tray_num is the index of tray_data_list with the current tray's data
         session['current_tray_num'] = 0
 
@@ -193,7 +193,6 @@ def get_csv_file():
 def picking_scan_tray():
     tray_id, file_data, num_racks = session['tray_data_list'][session['current_tray_num']]
     edge_length = 25 if num_racks == 6 else 30
-    print(num_racks)
 
     viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
     viewer.new_tray(file_data)
@@ -210,10 +209,9 @@ def picking_scan_tray():
                                                                                       file_data, \
                                                                                       num_racks, \
                                                                                       img_save_path)
-    
+
     #save returned scan data dict to memory so we can tell what changed after running tray
     session['prev_scan_data'] = scan_data_by_rack
-    
     #desired_tubes_incorrect = 0
     #total_tubes_incorrect = 0
 
@@ -238,11 +236,11 @@ def run_tray():
     if tray_data_list:
         #run the current tray
         tray_id, tray_data, num_racks = tray_data_list[session['current_tray_num']]
-        
+
         edge_length = 25 if num_racks == 6 else 30
         viewer = trayStatusViewer(edge_length, num_racks, TUBES_ALONG_X, TUBES_ALONG_Y)
         viewer.new_tray(tray_data)
-        
+
         motor.returnHome()
 
         tray_data_pick = tray_data[tray_data['Pick'] == 1]
@@ -262,11 +260,11 @@ def run_tray():
                     solenoidArray.actuateSolenoid(int(row))
                     viewer.pick_tube(rack_index, col, row)
 
-        motor.returnHome()
-        motor.release()
-        
+        # motor.returnHome()
+        # motor.release()
+
         scan_data_queue = scan(num_racks)
-        
+
         #list of rack ids - index is rack location in tray
         rack_ids = []
         for rack_index in range(num_racks):
@@ -295,7 +293,7 @@ def picking_rescan_tray():
     viewer.new_tray(file_data)
 
     scan_data_queue = scan(num_racks)
-    
+
     #list of rack ids - index is rack location in tray
     rack_ids = []
     for rack_index in range(num_racks):
@@ -311,7 +309,7 @@ def picking_rescan_tray():
                                                         rack_ids,
                                                         os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'), \
                                                         os.path.join(UPLOAD_FOLDER, 'output.csv'))
-        
+
     return render_template('picking/tray_ran.html', runningErrors = running_errors)
 
 @app.route('/next_tray')
@@ -334,8 +332,6 @@ def next_tray():
 
     #save image of tray in 'static/' to to be shown in run_tray
     viewer.save_image(os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'))
-    
-    #tray_id = 0
 
     return render_template('picking/scan_tray.html', nextTrayId = tray_id)
 
@@ -354,7 +350,7 @@ def scanning_enter_ids():
     rack_id3 = request.form['rackid3']
     rack_id4 = request.form['rackid4']
     rack_id5 = request.form['rackid5']
-    
+
     return render_template('scanning/check_ids.html', trayid = tray_id, rackId0 = rack_id0, rackId1 = rack_id1, \
                            rackId2 = rack_id2, rackId3 = rack_id3, rackId4 = rack_id4, rackId5 = rack_id5)
 

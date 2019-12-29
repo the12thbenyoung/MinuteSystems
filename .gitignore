@@ -1,11 +1,11 @@
 #ignore packages
 env/
 #images
-*.jpg
 *.jpeg
 *.png
 #swap files
 *.swp
 *.swo
+*.xcf
 *.csv
 __pycache__
