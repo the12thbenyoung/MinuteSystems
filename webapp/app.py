@@ -58,9 +58,9 @@ def scan(num_racks):
     motor.returnHome()
 
     for i in range(num_racks):
-        print(motor.position)
+        #print(motor.position)
         motor.moveToRackForCamera(i)
-        print(motor.position)
+        #print(motor.position)
 
         imagePath = os.path.join(WORKING_DIRECTORY, f'camerapics/rack{i}.jpg')
         #camera.start_preview()

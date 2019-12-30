@@ -283,9 +283,9 @@ def process_tube(tube_dict):
     #trying to process it
     tube_thr = cv2.adaptiveThreshold(tube_img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
                                        cv2.THRESH_BINARY,301,0)
-    print('done with adaptive threshold')
+    #print('done with adaptive threshold')
     tube_erode = cv2.erode(tube_thr, tube_erosion_kernel, iterations=1)
-    print('eroded tube')
+    #print('eroded tube')
 
     contours, _ = cv2.findContours(tube_erode, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if len(contours) < MIN_CONTOURS_IN_MATRIX:
@@ -418,7 +418,7 @@ def process_rack(rack_num, filename, data_queue=None):
         if tube_img.size != 0:
             tube_dict['image'] = tube_img
             tube_images.append(tube_dict)
-
+        
     #add tubes in far right col manually, as these are usually weird
     bottom_right_x = 2919
     bottom_right_y = 2116
@@ -437,9 +437,10 @@ def process_rack(rack_num, filename, data_queue=None):
         draw_contour_boxes(rack_warp, bounding_rect_dims)
 
     #data_queue being passed signifies that this should be done w/ multiprocessing
-    if False:
+    if data_queue:
+    #if False:
         #create a pool of processes to decode images in parallel
-        p = Pool(2)
+        p = Pool(4)
         codes = p.map(process_tube, tube_images)
         p.close()
         p.join()
