@@ -20,7 +20,7 @@ class SolenoidArray:
             self.solenoid.on()
             sleep(.5)
             self.solenoid.off()
-            sleep(4)
+            #sleep(4)
 
     def __init__(self):
         self.solenoids = [

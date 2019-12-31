@@ -148,6 +148,9 @@ def get_csv_file():
         inputDataframe = inputDataframe.drop(columns=['WellID'])
         inputDataframe = pd.concat([inputDataframe, tubePositionsDf], axis=1)
 
+        print(inputDataframe)
+        session['tray_data'] = inputDataframe
+
         tray_ids = list(unique(inputDataframe['TrayID']))
         #data frames holding the rows associatedprint(num_racks) with each tray
         tray_dataframes = [inputDataframe[inputDataframe['TrayID'] == tray_id] for tray_id in tray_ids]
@@ -184,7 +187,7 @@ def get_csv_file():
             print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
             next_tray_id = None
 
-    return render_template('picking/scan_tray.html', nextTrayId = next_tray_id)
+    return render_template('picking/run_tray.html', nextTrayId = next_tray_id)
 
 #This is run after the user presses Scan Tray on scan_tray.html
 #Or after the user presses Scan Again on tray_scanned.html
@@ -263,8 +266,6 @@ def run_tray():
         motor.returnHome()
         motor.release()
 
-        scan_data_queue = scan(num_racks)
-
         #list of rack ids - index is rack location in tray
         rack_ids = []
         for rack_index in range(num_racks):
@@ -272,14 +273,22 @@ def run_tray():
 
         #You need to make the tray image (save it to the normal spot, static/traydisplay.jpg)
         #and set running_errors somewhere in here
-        running_errors = viewer.make_post_run_scan_results(scan_data_queue, \
-                                                           tray_data_pick, \
-                                                           session['prev_scan_data'], \
-                                                           num_racks, \
-                                                           tray_id,
-                                                           rack_ids,
-                                                           os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'), \
-                                                           os.path.join(UPLOAD_FOLDER, 'output.csv'))
+        #running_errors = viewer.make_post_run_scan_results(scan_data_queue, \
+        #                                                   tray_data_pick, \
+        #                                                   session['prev_scan_data'], \
+        #                                                   num_racks, \
+        #                                                   tray_id,
+        #                                                   rack_ids,
+        #                                                   os.path.join(WORKING_DIRECTORY, 'static/traydisplay.jpg'), \
+        #                                                   os.path.join(UPLOAD_FOLDER, 'output.csv'))
+
+    
+
+    tray_data_not_pick = tray_data[tray_data['Pick'] == 0]
+    
+    tray_data_not_pick.to_csv(os.path.join(UPLOAD_FOLDER, 'output.csv'), index=False)
+
+    running_errors = 0
 
     return render_template('picking/tray_ran.html', runningErrors = running_errors)
 
@@ -386,6 +395,7 @@ def scan_tray():
 def download_csv():
     return send_file(os.path.join(UPLOAD_FOLDER, 'output.csv'), mimetype='text/csv',
                      attachment_filename='output.csv', as_attachment=True)
+
 
 if __name__ == '__main__':
     app.run(debug=True)#, host='0.0.0.0')
