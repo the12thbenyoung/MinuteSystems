@@ -162,10 +162,9 @@ def crop_bounding_rect(img, contour, edge_pix):
     return img_crop
 
 
-def crop_area_to_tube(dims, rack):
-    x,y,w,h = dims['x'], dims['y'], dims['w'], dims['h']
+def crop_area_to_tube(x, y, r, x_offset, rack):
     #crop to bounding rect around contour
-    tubeArea = rack[y:y+h, x:x+w]
+    tubeArea = rack[y - r : y + r, x + x_offset - r : x + x_offset + r]
 
     #crop again to just tube, trying to cut out surrounding shadow
     tube_inv = 255 - tubeArea
@@ -174,7 +173,7 @@ def crop_area_to_tube(dims, rack):
         tube = crop_bounding_rect(tubeArea, tubeContour, 5)
     else:
         return np.array([])
-    
+
     return tube
 
 def crop_to_harris(img, blockSize, numbers_thresh_factor, harris = np.array([])):
@@ -190,7 +189,7 @@ def crop_to_harris(img, blockSize, numbers_thresh_factor, harris = np.array([]))
         #detect corners
         opening = cv2.morphologyEx(thr, cv2.MORPH_OPEN, morphology_kernel)
         harris = cv2.cornerHarris(opening, HARRIS_BLOCK_SIZE, 1, 0.00)
-  
+ 
     contour = find_largest_contour(harris, HARRIS_THRESH_FACTOR)
     if contour.any():
         contourArea = cv2.contourArea(cv2.convexHull(contour)),
@@ -262,7 +261,7 @@ def process_matrix(img, blockSize, threshFactor):
 
             return decoded_matrix
         else:
-            print('zoinks scoob thats a bad aspect ratio')
+            # print('zoinks scoob thats a bad aspect ratio')
             return None
     else:
         return None
@@ -283,9 +282,7 @@ def process_tube(tube_dict):
     #trying to process it
     tube_thr = cv2.adaptiveThreshold(tube_img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
                                        cv2.THRESH_BINARY,301,0)
-    print('done with adaptive threshold')
     tube_erode = cv2.erode(tube_thr, tube_erosion_kernel, iterations=1)
-    print('eroded tube')
 
     contours, _ = cv2.findContours(tube_erode, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if len(contours) < MIN_CONTOURS_IN_MATRIX:
@@ -314,8 +311,13 @@ def process_tube(tube_dict):
                     badcount += 1
                     cv2.imwrite(f'images/badkek{badcount}.jpg', tube_img)
     #don't need image anymore, but do want result of decode
+    try:
+        tube_dict['data'] = int(data[0].data) if data else None
+    except ValueError:
+        cv2.imshow('bad', tube_dict['image'])
+        cv2.waitKey(0)
+        exit(0)
     del tube_dict['image']
-    tube_dict['data'] = int(data[0].data) if data else None
     return tube_dict
 
 #take dimensions (x,y,w,h) of rectangle around tube and its shadow and crop to an
@@ -358,73 +360,106 @@ def process_rack(rack_num, filename, data_queue=None):
     distort_matrix = cv2.getPerspectiveTransform(source_pts,destination_pts)
     rack_warp = cv2.warpPerspective(rack_original,distort_matrix,(cols,rows))
     rack_blur = cv2.GaussianBlur(rack_warp,(5,5),0)
-    rack_thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
-                                       cv2.THRESH_BINARY_INV,301,TUBE_AREA_THRESH_CONSTANT)
-    # erode image to try to get rid of white bridges between tubes and gaps on side of rack
-    rack_erode = cv2.erode(rack_thr, rack_erosion_kernel, iterations=1)
-    #open to remove noise and give smaller number of contours
-    rack_open = cv2.morphologyEx(rack_thr, cv2.MORPH_OPEN, morphology_kernel, iterations=5)
+
+    #old process_rack >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    #rack_thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+    #                                   cv2.THRESH_BINARY_INV,301,TUBE_AREA_THRESH_CONSTANT)
+    ## erode image to try to get rid of white bridges between tubes and gaps on side of rack
+    #rack_erode = cv2.erode(rack_thr, rack_erosion_kernel, iterations=1)
+    ##open to remove noise and give smaller number of contours
+    #rack_open = cv2.morphologyEx(rack_thr, cv2.MORPH_OPEN, morphology_kernel, iterations=5)
 
     if SHOW_RACK:
-        x = 2919
-        y = 2116
-        for i in range(8):
+        x = 2920
+        y = 2116-2*290+30
+        for i in range(4):
             cv2.rectangle(rack_warp, (x-2*i, y - 290*i), (x-2*i+200,y-290*i+200), 1, thickness=10)
         show_image_small(['rack', rack_warp])
         exit(0)
 
-    #get contours around tubes
-    contours, hierarchy = cv2.findContours(rack_open, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    #each set holds a group of points with similar y-coordinate - corresponding to one row in the rack
-    rowLists = []
-    #dict to associate (x,y) coordinate pairs with decoded outputs.
-    #get hash value with 100*x + y
-    coorToData = {}
-    #tuples of (indices, decoded data)
-    data_locations = []
+    ##get contours around tubes
+    #contours, hierarchy = cv2.findContours(rack_open, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    ##each set holds a group of points with similar y-coordinate - corresponding to one row in the rack
+    #rowLists = []
+    ##dict to associate (x,y) coordinate pairs with decoded outputs.
+    ##get hash value with 100*x + y
+    #coorToData = {}
+    ##tuples of (indices, decoded data)
+    #data_locations = []
 
-    #smallest and largest x-coordinate found
-    maxX = -1*float('inf')
-    minX = float('inf')
+    ##smallest and largest x-coordinate found
+    #maxX = -1*float('inf')
+    #minX = float('inf')
 
-    if PRINT_CONTOUR_SIZES:
-        for c in contours:
-            print(cv2.boundingRect(c))
-            cv2.imshow('crop', crop_bounding_rect(rack_warp, c, 0))
-            cv2.waitKey(0)
+    #if PRINT_CONTOUR_SIZES:
+    #    for c in contours:
+    #        print(cv2.boundingRect(c))
+    #        cv2.imshow('crop', crop_bounding_rect(rack_warp, c, 0))
+    #        cv2.waitKey(0)
 
-    #smallest non-rotated bounding rectangle for each contour
-    #and filter our those which are too small
-    bounding_rect_dims = list(filter(lambda c: c['w'] > TUBE_WIDTH_LOWER_BOUND and \
-                                        c['w'] < TUBE_WIDTH_UPPER_BOUND and \
-                                        c['h'] > TUBE_HEIGHT_LOWER_BOUND and\
-                                        c['h'] < TUBE_HEIGHT_UPPER_BOUND, \
-                              map(lambda c: dict(zip(('x','y','w','h'), \
-                                                     cv2.boundingRect(c))), \
-                                  contours)))
-    #make a list of cropped tube images
+    ##smallest non-rotated bounding rectangle for each contour
+    ##and filter our those which are too small
+    #bounding_rect_dims = list(filter(lambda c: c['w'] > TUBE_WIDTH_LOWER_BOUND and \
+    #                                    c['w'] < TUBE_WIDTH_UPPER_BOUND and \
+    #                                    c['h'] > TUBE_HEIGHT_LOWER_BOUND and\
+    #                                    c['h'] < TUBE_HEIGHT_UPPER_BOUND, \
+    #                          map(lambda c: dict(zip(('x','y','w','h'), \
+    #                                                 cv2.boundingRect(c))), \
+    #                              contours)))
+    ##make a list of cropped tube images
+    #tube_images = []
+    #for dims in bounding_rect_dims:
+    #    #associates tube image with its contour coordinates
+    #    tube_dict = {
+    #        'x': dims['x'],
+    #        'y': dims['y']
+    #    }
+    #    #contours on the extreme right of the image are often too narrow and don't
+    #    #cover the right part of the matrix. So if width is too small, extend to the right
+    #    if dims['x'] > CONTOUR_EXTEND_LOWER_X and dims['w'] < TUBE_MIN_WIDTH:
+    #        dims['w'] += TUBE_MIN_WIDTH - dims['w']
+    #    tube_img = crop_area_to_tube(dims, rack_warp)
+    #    if tube_img.size != 0:
+    #        tube_dict['image'] = tube_img
+    #        tube_images.append(tube_dict)
+    #old process_rack >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
     tube_images = []
-    for dims in bounding_rect_dims:
-        #associates tube image with its contour coordinates
-        tube_dict = {
-            'x': dims['x'],
-            'y': dims['y']
-        }
-        #contours on the extreme right of the image are often too narrow and don't
-        #cover the right part of the matrix. So if width is too small, extend to the right
-        if dims['x'] > CONTOUR_EXTEND_LOWER_X and dims['w'] < TUBE_MIN_WIDTH:
-            dims['w'] += TUBE_MIN_WIDTH - dims['w']
-        tube_img = crop_area_to_tube(dims, rack_warp)
-        if tube_img.size != 0:
-            tube_dict['image'] = tube_img
-            tube_images.append(tube_dict)
+    circles = cv2.HoughCircles(rack_blur, cv2.HOUGH_GRADIENT, 1, 250,\
+                               param1=60, param2=20, minRadius=80, maxRadius=100)
+    if circles is not None:
+        circles = np.round(circles[0, :]).astype("int")
+        for (x,y,r) in circles:
+            r = r + 5
+            #crop out rectangle surrounding tube
+            #tubes on left side tend to have circle centered left of matrix and vice versa
+            x_offset = (x - 1575)//1000
+            cv2.imshow('rack', rack_warp[y - r : y + r, x + x_offset - r : x + x_offset + r])
+            tube_img = crop_area_to_tube(x, y, r, x_offset, rack_warp)
+            cv2.imshow('tube_img', tube_img)
+            cv2.waitKey(0)
+            if tube_img.size != 0:
+                tube_images.append(
+                    {
+                        'x': x,
+                        'y': y,
+                        'image': tube_img
+                    }
+                )
+            # cv2.rectangle(rack_warp, (x+x_offset-r, y-r), (x+x_offset+r,y+r), 1, thickness=5)
+            # cv2.imshow('rack', rack_warp[y - r : y + r, x + x_offset - r : x + x_offset + r])
+            # cv2.waitKey(0)
 
-    #add tubes in far right col manually, as these are usually weird
-    bottom_right_x = 2919
-    bottom_right_y = 2116
+        # show_image_small(['rack',rack_warp])
+        # exit(0)
+
+    #add middle four tubes in right col manually, since these sometimes don't contrast
+    #with opening in rack
+    bottom_x = 2919
+    bottom_y = 1566
     for i in range(8):
-        this_x = bottom_right_x - 2*i
-        this_y = bottom_right_y - 290*i
+        this_x = bottom_x - 2*i
+        this_y = bottom_y - 290*i
         tube_dict = {
             'x': this_x,
             'y': this_y,
@@ -448,9 +483,7 @@ def process_rack(rack_num, filename, data_queue=None):
         for tube in tube_images:
             codes.append(process_tube(tube))
 
-    for data_dict in codes:
-        if data_dict['data']:
-            data_locations.append(data_dict)
+    data_locations = [data_dict for data_dict in codes if data_dict['data']]
 
     #dict that associates hashed (x,y) position with data
     data_indices, matrices_decoded = get_data_indices(data_locations)
