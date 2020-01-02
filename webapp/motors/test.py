@@ -1,4 +1,5 @@
 from motor import Motor
+from time import sleep
 
 motor = Motor()
 
@@ -32,3 +33,12 @@ while (order != "exit"):
         print(motor.position)
     elif (order == "test"):
         motor.test()
+'''
+while(1):
+    for i in range(1000):
+        motor.stepForwardDouble()
+        #sleep(.1)
+    for i in range(1000):
+        motor.stepBackwardDouble()
+        #sleep(.1)
+'''

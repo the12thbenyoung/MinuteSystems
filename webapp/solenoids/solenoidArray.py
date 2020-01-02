@@ -18,9 +18,15 @@ class SolenoidArray:
 
         def actuate(self):
             self.solenoid.on()
-            sleep(.5)
+            sleep(.1)
             self.solenoid.off()
-            #sleep(4)
+            sleep(.5)
+            
+        def actuateVariable(self, burst, pause):
+            self.solenoid.on()
+            sleep(burst)
+            self.solenoid.off()
+            sleep(pause)
 
     def __init__(self):
         self.solenoids = [
@@ -40,3 +46,6 @@ class SolenoidArray:
 
     def actuateSolenoid(self, solenoid):
         self.solenoids[solenoid].actuate()
+        
+    def actuateSolenoidVariable(self, solenoid, burst, pause):
+        self.solenoids[solenoid].actuateVariable(burst, pause)

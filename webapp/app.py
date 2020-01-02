@@ -254,12 +254,12 @@ def run_tray():
             columns = unique(rackData['TubeColumn'])
             columns.sort()
             for col in columns:
-                #move to rack,column
+                #  move to rack,column
                 motor.moveToTube(int(rack_index), int(col))
                 colData = rackData[rackData['TubeColumn'] == col]
                 for row in colData['TubeRow']:
                     print(tray_id, rack_index, col, row)
-                    #activate soleniod
+                    #  activate soleniod
                     solenoidArray.actuateSolenoid(int(row))
                     viewer.pick_tube(rack_index, col, row)
 
