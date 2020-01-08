@@ -15,7 +15,7 @@ while (order != -1):
     #if (order == "pop"):
         #row = int(input("Enter a row: "))
     if (order <= 11 and order != -1):
-        solenoidArray.actuateSolenoidVariable(order, burst, pause)
+        solenoidArray.actuateSolenoid(order)
     elif (order == 12):
         burst = float(input("Enter the burst time: "))
     elif (order == 13):

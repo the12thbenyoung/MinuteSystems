@@ -1,0 +1,2 @@
+burst time = 0.10
+burst delay = 0.50

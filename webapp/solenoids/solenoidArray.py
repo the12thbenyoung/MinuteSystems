@@ -5,7 +5,7 @@ class SolenoidArray:
 
     #This class represents one solenoid
     class Solenoid:
-
+        
         #Initializes a solenoid on a GPIO pin. Called before using a solenoid
         def __init__(self, gpio_pin):
             self.solenoid = OutputDevice(gpio_pin);
@@ -15,18 +15,18 @@ class SolenoidArray:
 
         def off(self):
             self.solenoid.off()
-
+        '''
         def actuate(self):
             self.solenoid.on()
-            sleep(.1)
+            sleep(self.burst)
             self.solenoid.off()
-            sleep(.5)
-            
-        def actuateVariable(self, burst, pause):
+            sleep(delay)
+        '''
+        def actuateVariable(self, burst, delay):
             self.solenoid.on()
             sleep(burst)
             self.solenoid.off()
-            sleep(pause)
+            sleep(delay)
 
     def __init__(self):
         self.solenoids = [
@@ -43,9 +43,17 @@ class SolenoidArray:
             self.Solenoid(22),
             self.Solenoid(24)
         ]
+        f = open("/home/pi/Documents/MinuteSystems/webapp/solenoids/config.txt", "r")
+        line = f.readline()
+        self.burst = float(line[-5:-1])
+        print(self.burst)
+        line = f.readline()
+        self.delay = float(line[-5:-1])
+        print(self.delay)
+        f.close()
 
     def actuateSolenoid(self, solenoid):
-        self.solenoids[solenoid].actuate()
+        self.solenoids[solenoid].actuateVariable(self.burst, self.delay)
         
-    def actuateSolenoidVariable(self, solenoid, burst, pause):
-        self.solenoids[solenoid].actuateVariable(burst, pause)
+    def actuateSolenoidVariable(self, solenoid, burst, delay):
+        self.solenoids[solenoid].actuateVariable(burst, delay)
