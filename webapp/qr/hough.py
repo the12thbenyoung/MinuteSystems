@@ -1,40 +1,79 @@
 import cv2
 import numpy as np
 import math
+from pylibdmtx.pylibdmtx import decode
 
-canny_upper_threshold = 90
-for pic in range(1):
-    img = cv2.imread('images/badkek4.jpg')
+MORPHOLOGY_KERNEL_SIZE=3
+morphology_kernel = np.ones((MORPHOLOGY_KERNEL_SIZE, MORPHOLOGY_KERNEL_SIZE), np.uint8)
+def move_along_slope(point, slope, dist, positive_x, *args):
+    """return: (x,y) - point resulting from moving dist along line
+       point: (x,y) coordinates of starting point
+       slope: slope of target line
+       dist: distance in pixels to move along line
+       positive_x: True if positive x-direction, False if negative
+       args: slope, dist, positive_x again to move along two lines"""
+    x, y = point
+    #move dist px in target direction:
+    #l = dist
+    #dy = m*dx
+    #dy^2 + dx^2 = l^2
+    #(m*dx)^2 + dx^2 = l^2
+    #(m^2+1)dx^2 = l^2
+    #dx = sqrt(l^2/(m^2+1))
+    dx = math.sqrt(dist**2 / (slope**2 + 1))
+    dy = slope*dx
+    if positive_x:
+        new_x = int(x+dx)
+        new_y = int(y+dy)
+    else:
+        new_x = int(x-dx)
+        new_y = int(y-dy)
+    if not args:
+        return new_x, new_y
+    elif len(args) == 3:
+        #move again along second line
+        slope, dist, positive_x = args
+        dx = math.sqrt(dist**2 / (slope**2 + 1))
+        dy = slope*dx
+        if positive_x:
+            new_x = int(new_x+dx)
+            new_y = int(new_y+dy)
+        else:
+            new_x = int(new_x-dx)
+            new_y = int(new_y-dy)
+        return new_x, new_y
+    else:
+        raise Exception("Improper number of extra arguments passed. Required: 0 or 3 (slope, dist, positive_x)")
+
+
+def process_tube(img_path):
+    img = cv2.imread(img_path)
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    # _, thr = cv2.threshold(gray, 0.4 * gray.max(), 255, cv2.THRESH_BINARY)
     rack_blur = cv2.GaussianBlur(gray,(5,5),0)
-    # thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
-    #                                        cv2.THRESH_BINARY,71,0)
 
-    # cv2.imshow('thr', thr)
+    # cv2.imshow('rack_blur', rack_blur)
+    # cv2.imshow('gray', gray)
     # cv2.waitKey(0)
-
-    # # KERNEL_SIZE = 3
-    # kernel = np.ones((3, 3), np.uint8)
-    # opening = cv2.morphologyEx(thr, cv2.MORPH_OPEN, kernel)
-
-    #0-125: smallest
-    #125- : largest
-    edges = cv2.Canny(rack_blur, 30, canny_upper_threshold, apertureSize=3)
-
-    cv2.imshow('edges', edges)
-    cv2.waitKey(0)
-
-    lines = cv2.HoughLines(edges,1,np.pi/90,50)
-    #get rid of extra lists
-    lines = [l[0] for l in lines]
+    # decoded_matrix = decode(gray)
+    # print(decoded_matrix[0].data)
 
     rho_diff = 20
     theta_diff = 0.1
     #separate into groups by angle - should be two groups of lines close together
     line_groups = []
+    canny_upper_threshold = 120
     while(len(line_groups) < 2 and canny_upper_threshold > 80):
         canny_upper_threshold -= 5
+        edges = cv2.Canny(rack_blur, 30, canny_upper_threshold, apertureSize=3)
+
+        # cv2.imshow('edges', edges)
+        # cv2.waitKey(0)
+
+        lines = cv2.HoughLines(edges,1,np.pi/90,50)
+        if lines is None:
+            continue
+        #get rid of extra lists
+        lines = [l[0] for l in lines]
         for line in lines:
             found_group = False
             if not line_groups:
@@ -58,6 +97,8 @@ for pic in range(1):
                                          for j in range(i)
                                    if abs(abs(avg_thetas[i] - avg_thetas[j]) - math.pi/2) < 0.2],
                                   key=lambda t: len(line_groups[t[0]]) + len(line_groups[t[1]]))
+    else:
+        return None
 
        #get best line in each of the two chosen groups
     bounding_lines = []
@@ -93,34 +134,74 @@ for pic in range(1):
     b[0] = rho1/(sin_theta1 if sin_theta1 != 0 else 1e-20)
     b[1] = rho2/(sin_theta2 if sin_theta2 != 0 else 1e-20)
 
-    print(m)
-    print(b)
     #solve system to find intersection of lines
     x_intersect = (b[0]-b[1])/(m[1]-m[0])
     y_intersect = m[0]*x_intersect + b[0]
 
-    #for each line, hold True to move in positive x-direction
-    matrix_directions = [None,None]
+    MATRIX_LENGTH = 110
+    CORNER_OFFSET = 10
+    matrix_directions = [None, None]
     #find intersections of lines with walls of image
     for i in range(2):
-    #horizontal line
-    if m[i] == 0:
-        #move in direction of longer line segment
-        matrix_directions[i] = rack_blur.shape[1] - x_intersect > x_intersect
-    else:
-        #otherwise, figure out which sides of the picture the line intersects with.
-        #intersection with top boundary (y=0)
-        top_intersect_x = -b[i]/m[i]
-        bottom_intersect_x = (rack_blur.shape[0] - b[i])/m[i]
-        #move in direction of further distance from line intersection to picture edge
-        left_intersect = min(top_intersect_x, bottom_intersect_x, 0)
-        right_intersect = max(top_intersect_x, bottom_intersect_x, rack_blur.shape[1])
-        matrix_directions[i] = right_intersect - x_intersect > x_intersect - left_intersect
+        #horizontal line
+        if m[i] == 0:
+            #move in direction of longer line segment
+            matrix_direction = rack_blur.shape[1] - x_intersect > x_intersect
+        else:
+            #otherwise, figure out which sides of the picture the line intersects with.
+            #intersection with top boundary (y=0)
+            top_intersect_x = -b[i]/m[i]
+            bottom_intersect_x = (rack_blur.shape[0] - b[i])/m[i]
+            #move in direction of further distance from line intersection to picture edge
+            left_intersect = max(d for d in [top_intersect_x, bottom_intersect_x, 0] \
+                                 if d <= x_intersect)
+            right_intersect = min(d for d in [top_intersect_x, bottom_intersect_x, rack_blur.shape[1]] \
+                                  if d >= x_intersect)
+            matrix_directions[i] = right_intersect - x_intersect > x_intersect - left_intersect
 
+    #step a bit away from initial corner to ensure whole matrix is captured
+    intersect_corner = move_along_slope((x_intersect, y_intersect), \
+                                         m[0], CORNER_OFFSET, not matrix_directions[0],
+                                         m[1], CORNER_OFFSET, not matrix_directions[1])
+    #move to adjacent corners, overshoot a bit
+    adj_corner0 = move_along_slope(intersect_corner,
+                                   m[0], MATRIX_LENGTH, matrix_directions[0])
+    adj_corner1 = move_along_slope(intersect_corner,
+                                   m[1], MATRIX_LENGTH, matrix_directions[1])
+    #move to corner opposite initial corner
+    far_corner = move_along_slope(adj_corner0,
+                                  m[1], MATRIX_LENGTH, matrix_directions[1])
+
+    #warp rectangle to crop from image
+    src_points = np.array([intersect_corner, adj_corner0, adj_corner1, far_corner])
+    matrix_rect = cv2.minAreaRect(src_points)
+    box = cv2.boxPoints(matrix_rect).astype("float32")
+    width = int(matrix_rect[1][0])
+    height = int(matrix_rect[1][1])
+    distorted_points = np.array([[0, height-1],
+                                 [0, 0],
+                                 [width-1, 0],
+                                 [width-1, height-1]]).astype("float32")
+    M = cv2.getPerspectiveTransform(box, distorted_points)
+    warped = cv2.warpPerspective(gray, M, (width, height))
+
+    _, warped_thresh = cv2.threshold(warped, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    warped_thresh_open = rack_open = cv2.morphologyEx(warped_thresh, cv2.MORPH_CLOSE, morphology_kernel, iterations=3)
+    _, pure_thresh = cv2.threshold(warped, 0.6*warped.max(), 255, cv2.THRESH_BINARY)
+
+    # test = pure_thresh - warped_thresh_open
+    cv2.imshow('thresh', pure_thresh)
+    cv2.imshow('open', warped_thresh)
+    # cv2.imshow('test', test)
+    cv2.waitKey(0)
+
+    decoded_matrix = decode(pure_thresh)
+    print(decoded_matrix[0].data)
+    decoded_matrix = decode(warped_thresh)
+    print(decoded_matrix[0].data)
 
     numLines = 0
     for line in bounding_lines:
-        print(line)
         rho,theta = line
         numLines += 1
         a = np.cos(theta)
@@ -134,7 +215,9 @@ for pic in range(1):
 
         cv2.line(img,(x1,y1),(x2,y2),(0,0,255),2)
 
-    print(x_intersect, y_intersect)
     cv2.circle(img, (x_intersect, y_intersect), 10, (0,255,0), thickness=-1)
     cv2.imshow('lines', img)
     cv2.waitKey(0)
+if __name__ == '__main__':
+    IMG_PATH = 'test.jpg'
+    process_tube(IMG_PATH)

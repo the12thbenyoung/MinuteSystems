@@ -12,6 +12,7 @@ from pylibdmtx.pylibdmtx import decode
 from time import sleep
 from multiprocessing import Pool, Process, Queue
 import os
+import math
 
 FILENAME = 'real_images/rack4.jpg'
 
@@ -266,8 +267,233 @@ def process_matrix(img, blockSize, threshFactor):
     else:
         return None
 
+def move_along_slope(point, slope, dist, positive_x, *args):
+    """return: (x,y) - point resulting from moving dist along line
+       point: (x,y) coordinates of starting point
+       slope: slope of target line
+       dist: distance in pixels to move along line
+       positive_x: True if positive x-direction, False if negative
+       args: slope, dist, positive_x again to move along two lines"""
+    x, y = point
+    #move dist px in target direction:
+    #l = dist
+    #dy = m*dx
+    #dy^2 + dx^2 = l^2
+    #(m*dx)^2 + dx^2 = l^2
+    #(m^2+1)dx^2 = l^2
+    #dx = sqrt(l^2/(m^2+1))
+    dx = math.sqrt(dist**2 / (slope**2 + 1))
+    dy = slope*dx
+    if positive_x:
+        new_x = int(x+dx)
+        new_y = int(y+dy)
+    else:
+        new_x = int(x-dx)
+        new_y = int(y-dy)
+    if not args:
+        return new_x, new_y
+    elif len(args) == 3:
+        #move again along second line
+        slope, dist, positive_x = args
+        dx = math.sqrt(dist**2 / (slope**2 + 1))
+        dy = slope*dx
+        if positive_x:
+            new_x = int(new_x+dx)
+            new_y = int(new_y+dy)
+        else:
+            new_x = int(new_x-dx)
+            new_y = int(new_y-dy)
+        return new_x, new_y
+    else:
+        raise Exception("Improper number of extra arguments passed. Required: 0 or 3 (slope, dist, positive_x)")
 
-def process_tube(tube_dict):
+def hough_process_tube(tube_dict):
+    gray = tube_dict['image']
+    cv2.imwrite(f'test.jpg', gray)
+    del tube_dict['image']
+    if gray.shape[0] == 0 or gray.shape[1] == 0:
+        return tube_dict
+    tube_blur = cv2.GaussianBlur(gray,(5,5),0)
+
+    # cv2.imshow('tube_blur', tube_blur)
+    # cv2.waitKey(0)
+
+    # decoded_matrix = decode(gray)
+    # print(decoded_matrix[0].data)
+
+    rho_diff = 20
+    theta_diff = 0.1
+    #separate into groups by angle - should be two groups of lines close together
+    line_groups = []
+    canny_upper_threshold = 120
+    while(len(line_groups) < 2 and canny_upper_threshold > 80):
+        canny_upper_threshold -= 5
+        edges = cv2.Canny(tube_blur, 30, canny_upper_threshold, apertureSize=3)
+
+        # cv2.imshow('edges', edges)
+        # cv2.waitKey(0)
+
+        lines = cv2.HoughLines(edges,1,np.pi/90,50)
+        if lines is None:
+            continue
+        #get rid of extra lists
+        lines = [l[0] for l in lines]
+
+        # for line in lines:
+        #     rho,theta = line
+        #     a = np.cos(theta)
+        #     b = np.sin(theta)
+        #     x0 = a*rho
+        #     y0 = b*rho
+        #     x1 = int(x0 + 1000*(-b))
+        #     y1 = int(y0 + 1000*(a))
+        #     x2 = int(x0 - 1000*(-b))
+        #     y2 = int(y0 - 1000*(a))
+
+        #     cv2.line(tube_blur,(x1,y1),(x2,y2),(0,0,255),2)
+
+        # cv2.imshow('lines', tube_blur)
+        # cv2.waitKey(0)
+
+        for line in lines:
+            found_group = False
+            if not line_groups:
+                line_groups.append([line])
+            else:
+                for group in line_groups:
+                    if abs(line[0] - np.mean([l[0] for l in group])) < rho_diff and \
+                            abs(line[1] - np.mean([l[1] for l in group])) < theta_diff:
+                        group.append(line)
+                        found_group = True
+                        break
+                if not found_group:
+                    line_groups.append([line])
+
+    if len(line_groups) >= 2:
+        #we found enough lines
+        #take the two largest groups with angle difference around pi/2
+        avg_thetas = [np.mean([line[1] for line in group]) for group in line_groups]
+        avg_rhos = [np.mean([line[0] for line in group]) for group in line_groups]
+        index_pair_candidates = [(i,j) for i in range(len(line_groups))
+                                       for j in range(i)
+                                       if abs(abs(avg_thetas[i] - avg_thetas[j]) - math.pi/2) < 0.2]
+        if not index_pair_candidates:
+            return tube_dict
+        bounding_index_pair = max(index_pair_candidates,
+                                  key=lambda t: len(line_groups[t[0]]) + len(line_groups[t[1]]))
+    else:
+        return tube_dict
+
+       #get best line in each of the two chosen groups
+    bounding_lines = []
+    for bounding_group_index in bounding_index_pair:
+        if avg_rhos[bounding_group_index] > 0:
+            if 0 <= avg_thetas[bounding_group_index] < math.pi/2:
+                if 0 <= avg_rhos[bounding_group_index] < math.sqrt(tube_blur.shape[0]**2 + tube_blur.shape[1]**2)/2:
+                    #line is on inner side (upper left) of picture, so to choose line furthest from
+                    #matrix edge choose innermost line (smallest row)
+                    bounding_line_test = lambda line: -line[0]
+                else:
+                    #line on outer side of picture, choose outermost line
+                    bounding_line_test = lambda line: line[0]
+            else: #avg_thetas[bounding_group_index] >= math.pi/2
+                #always choose line with largest rho
+                    bounding_line_test = lambda line: line[0]
+        else: #avg_rhos[bounding_group_index] <= 0:
+            #also always use largest rho
+            bounding_line_test = lambda line: line[0]
+
+        bounding_lines.append(max(line_groups[bounding_group_index],
+                                  key=bounding_line_test))
+
+    m = [None,None]
+    b = [None,None]
+    #find intersection of two bounding lines
+    rho1, theta1 = bounding_lines[0]
+    rho2, theta2 = bounding_lines[1]
+    sin_theta1 = np.sin(theta1)
+    sin_theta2 = np.sin(theta2)
+    m[0] = -np.cos(theta1)/(sin_theta1 if sin_theta1 != 0 else 1e-10)
+    m[1] = -np.cos(theta2)/(sin_theta2 if sin_theta2 != 0 else 1e-20)
+    b[0] = rho1/(sin_theta1 if sin_theta1 != 0 else 1e-20)
+    b[1] = rho2/(sin_theta2 if sin_theta2 != 0 else 1e-20)
+
+    #solve system to find intersection of lines
+    x_intersect = (b[0]-b[1])/(m[1]-m[0])
+    y_intersect = m[0]*x_intersect + b[0]
+
+    MATRIX_LENGTH = 110
+    CORNER_OFFSET = 10
+    matrix_directions = [None, None]
+    #find intersections of lines with walls of image
+    for i in range(2):
+        #horizontal line
+        if m[i] == 0:
+            #move in direction of longer line segment
+            matrix_direction = tube_blur.shape[1] - x_intersect > x_intersect
+        else:
+            #otherwise, figure out which sides of the picture the line intersects with.
+            #intersection with top boundary (y=0)
+            top_intersect_x = -b[i]/m[i]
+            bottom_intersect_x = (tube_blur.shape[0] - b[i])/m[i]
+            #move in direction of further distance from line intersection to picture edge
+            try:
+                left_intersect = max(d for d in [top_intersect_x, bottom_intersect_x, 0] \
+                                     if d <= x_intersect)
+                right_intersect = min(d for d in [top_intersect_x, bottom_intersect_x, tube_blur.shape[1]] \
+                                      if d >= x_intersect)
+            except ValueError:
+                print(x_intersect, top_intersect_x, bottom_intersect_x, tube_blur.shape[1])
+                return tube_dict
+            matrix_directions[i] = right_intersect - x_intersect > x_intersect - left_intersect
+
+    #step a bit away from initial corner to ensure whole matrix is captured
+    intersect_corner = move_along_slope((x_intersect, y_intersect), \
+                                         m[0], CORNER_OFFSET, not matrix_directions[0],
+                                         m[1], CORNER_OFFSET, not matrix_directions[1])
+    #move to adjacent corners, overshoot a bit
+    adj_corner0 = move_along_slope(intersect_corner,
+                                   m[0], MATRIX_LENGTH, matrix_directions[0])
+    adj_corner1 = move_along_slope(intersect_corner,
+                                   m[1], MATRIX_LENGTH, matrix_directions[1])
+    #move to corner opposite initial corner
+    far_corner = move_along_slope(adj_corner0,
+                                  m[1], MATRIX_LENGTH, matrix_directions[1])
+
+    #warp rectangle to crop from image
+    src_points = np.array([intersect_corner, adj_corner0, adj_corner1, far_corner])
+    matrix_rect = cv2.minAreaRect(src_points)
+    box = cv2.boxPoints(matrix_rect).astype("float32")
+    width = int(matrix_rect[1][0])
+    height = int(matrix_rect[1][1])
+    distorted_points = np.array([[0, height-1],
+                                 [0, 0],
+                                 [width-1, 0],
+                                 [width-1, height-1]]).astype("float32")
+    M = cv2.getPerspectiveTransform(box, distorted_points)
+    warped = cv2.warpPerspective(gray, M, (width, height))
+
+    _, warped_thresh = cv2.threshold(warped, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    warped_thresh_open = rack_open = cv2.morphologyEx(warped_thresh, cv2.MORPH_CLOSE, morphology_kernel, iterations=3)
+    _, pure_thresh = cv2.threshold(warped, 0.6*warped.max(), 255, cv2.THRESH_BINARY)
+
+    test = pure_thresh - warped_thresh_open
+    # cv2.imshow('thresh', pure_thresh)
+    # cv2.imshow('open', warped_thresh)
+    # cv2.imshow('test', test)
+    # cv2.waitKey(0)
+
+    decoded_matrix = decode(pure_thresh)
+    #don't need image anymore, but do want result of decode
+    try:
+        tube_dict['data'] = int(decoded_matrix[0].data) if decoded_matrix else None
+    except ValueError:
+        cv2.imshow('bad', tube_dict['image'])
+        cv2.waitKey(0)
+    return tube_dict
+
+
+def harris_process_tube(tube_dict):
     global badcount
     tube_img = tube_dict['image']
     if SHOW_IMAGES:
@@ -330,7 +556,6 @@ def get_data_indices(data_locations, img=None):
     if img is not None:
         for data in data_locations:
             cv2.putText(img, f'{data["x"]},{data["y"]}', (data['x'], data['y']), cv2.FONT_HERSHEY_SIMPLEX, 1.5, 1, thickness=5)
-        show_image_small(['rack', img])
 
     #find indices of row and column closest to each tube
     for data_loc in data_locations:
@@ -361,14 +586,6 @@ def process_rack(rack_num, filename, data_queue=None):
     rack_warp = cv2.warpPerspective(rack_original,distort_matrix,(cols,rows))
     rack_blur = cv2.GaussianBlur(rack_warp,(5,5),0)
 
-    #old process_rack >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-    #rack_thr = cv2.adaptiveThreshold(rack_blur,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
-    #                                   cv2.THRESH_BINARY_INV,301,TUBE_AREA_THRESH_CONSTANT)
-    ## erode image to try to get rid of white bridges between tubes and gaps on side of rack
-    #rack_erode = cv2.erode(rack_thr, rack_erosion_kernel, iterations=1)
-    ##open to remove noise and give smaller number of contours
-    #rack_open = cv2.morphologyEx(rack_thr, cv2.MORPH_OPEN, morphology_kernel, iterations=5)
-
     if SHOW_RACK:
         x = 2920
         y = 2116-2*290+30
@@ -376,53 +593,6 @@ def process_rack(rack_num, filename, data_queue=None):
             cv2.rectangle(rack_warp, (x-2*i, y - 290*i), (x-2*i+200,y-290*i+200), 1, thickness=10)
         show_image_small(['rack', rack_warp])
         exit(0)
-
-    ##get contours around tubes
-    #contours, hierarchy = cv2.findContours(rack_open, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    ##each set holds a group of points with similar y-coordinate - corresponding to one row in the rack
-    #rowLists = []
-    ##dict to associate (x,y) coordinate pairs with decoded outputs.
-    ##get hash value with 100*x + y
-    #coorToData = {}
-    ##tuples of (indices, decoded data)
-    #data_locations = []
-
-    ##smallest and largest x-coordinate found
-    #maxX = -1*float('inf')
-    #minX = float('inf')
-
-    #if PRINT_CONTOUR_SIZES:
-    #    for c in contours:
-    #        print(cv2.boundingRect(c))
-    #        cv2.imshow('crop', crop_bounding_rect(rack_warp, c, 0))
-    #        cv2.waitKey(0)
-
-    ##smallest non-rotated bounding rectangle for each contour
-    ##and filter our those which are too small
-    #bounding_rect_dims = list(filter(lambda c: c['w'] > TUBE_WIDTH_LOWER_BOUND and \
-    #                                    c['w'] < TUBE_WIDTH_UPPER_BOUND and \
-    #                                    c['h'] > TUBE_HEIGHT_LOWER_BOUND and\
-    #                                    c['h'] < TUBE_HEIGHT_UPPER_BOUND, \
-    #                          map(lambda c: dict(zip(('x','y','w','h'), \
-    #                                                 cv2.boundingRect(c))), \
-    #                              contours)))
-    ##make a list of cropped tube images
-    #tube_images = []
-    #for dims in bounding_rect_dims:
-    #    #associates tube image with its contour coordinates
-    #    tube_dict = {
-    #        'x': dims['x'],
-    #        'y': dims['y']
-    #    }
-    #    #contours on the extreme right of the image are often too narrow and don't
-    #    #cover the right part of the matrix. So if width is too small, extend to the right
-    #    if dims['x'] > CONTOUR_EXTEND_LOWER_X and dims['w'] < TUBE_MIN_WIDTH:
-    #        dims['w'] += TUBE_MIN_WIDTH - dims['w']
-    #    tube_img = crop_area_to_tube(dims, rack_warp)
-    #    if tube_img.size != 0:
-    #        tube_dict['image'] = tube_img
-    #        tube_images.append(tube_dict)
-    #old process_rack >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
     tube_images = []
     circles = cv2.HoughCircles(rack_blur, cv2.HOUGH_GRADIENT, 1, 250,\
@@ -434,10 +604,10 @@ def process_rack(rack_num, filename, data_queue=None):
             #crop out rectangle surrounding tube
             #tubes on left side tend to have circle centered left of matrix and vice versa
             x_offset = (x - 1575)//1000
-            cv2.imshow('rack', rack_warp[y - r : y + r, x + x_offset - r : x + x_offset + r])
+            # cv2.imshow('rack', rack_warp[y - r : y + r, x + x_offset - r : x + x_offset + r])
             tube_img = crop_area_to_tube(x, y, r, x_offset, rack_warp)
-            cv2.imshow('tube_img', tube_img)
-            cv2.waitKey(0)
+            # cv2.imshow('tube_img', tube_img)
+            # cv2.waitKey(0)
             if tube_img.size != 0:
                 tube_images.append(
                     {
@@ -468,22 +638,22 @@ def process_rack(rack_num, filename, data_queue=None):
         tube_images.append(tube_dict)
 
     tubes_found = len(tube_images)
-    if DRAW_CONTOURS:
-        draw_contour_boxes(rack_warp, bounding_rect_dims)
 
     #data_queue being passed signifies that this should be done w/ multiprocessing
     if False:
         #create a pool of processes to decode images in parallel
         p = Pool(2)
-        codes = p.map(process_tube, tube_images)
+        codes = p.map(hough_process_tube, tube_images)
         p.close()
         p.join()
     else:
         codes = []
         for tube in tube_images:
-            codes.append(process_tube(tube))
+            data = hough_process_tube(tube)
+            print(data)
+            codes.append(data)
 
-    data_locations = [data_dict for data_dict in codes if data_dict['data']]
+    data_locations = [data_dict for data_dict in codes if data_dict.get('data')]
 
     #dict that associates hashed (x,y) position with data
     data_indices, matrices_decoded = get_data_indices(data_locations)
